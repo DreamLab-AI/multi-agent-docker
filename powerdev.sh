@@ -48,13 +48,13 @@ setup_run_opts() {
     -u dev
     --env-file "${ENVFILE}"
     # Mount with proper permissions - all writable by dev user
-    -v "${EXTERNAL_DIR:-./.swarm-docker/ext}:/workspace/ext:rw"
-    -v "./.swarm-docker/docker_data:/home/dev/data:rw"
-    -v "./.swarm-docker/docker_workspace:/home/dev/workspace:rw"
-    -v "./.swarm-docker/docker_analysis:/home/dev/analysis:rw"
-    -v "./.swarm-docker/docker_logs:/home/dev/logs:rw"
-    -v "./.swarm-docker/docker_output:/home/dev/output:rw"
-    -v "./.swarm-docker/docker_latex:/home/dev/latex:rw"
+    -v "${EXTERNAL_DIR:-./.agent-mount/ext}:/workspace/ext:rw"
+    -v "./.agent-mount/docker_data:/home/dev/data:rw"
+    -v "./.agent-mount/docker_workspace:/home/dev/workspace:rw"
+    -v "./.agent-mount/docker_analysis:/home/dev/analysis:rw"
+    -v "./.agent-mount/docker_logs:/home/dev/logs:rw"
+    -v "./.agent-mount/docker_output:/home/dev/output:rw"
+    -v "./.agent-mount/docker_latex:/home/dev/latex:rw"
     # SSH access (read-only for security)
     -v "${HOME}/.ssh:/home/dev/.ssh:ro"
     -v "${SSH_AUTH_SOCK:-/tmp/ssh-agent.sock}:/tmp/ssh-agent.sock:rw"
@@ -86,37 +86,37 @@ preflight() {
   # fi
 
   # Ensure required directories exist with proper permissions
-  mkdir -p "./.swarm-docker/docker_data" "./.swarm-docker/docker_workspace"
-  mkdir -p "./.swarm-docker/docker_analysis" "./.swarm-docker/docker_logs" "./.swarm-docker/docker_output" "./.swarm-docker/docker_latex"
-  mkdir -p "./.swarm-docker/docker_data/claude-flow"  # Claude Flow data directory
+  mkdir -p "./.agent-mount/docker_data" "./.agent-mount/docker_workspace"
+  mkdir -p "./.agent-mount/docker_analysis" "./.agent-mount/docker_logs" "./.agent-mount/docker_output" "./.agent-mount/docker_latex"
+  mkdir -p "./.agent-mount/docker_data/claude-flow"  # Claude Flow data directory
 
-  # Create EXTERNAL_DIR if set, otherwise create the default ./.swarm-docker/ext
+  # Create EXTERNAL_DIR if set, otherwise create the default ./.agent-mount/ext
   if [[ -n "${EXTERNAL_DIR}" ]]; then
     mkdir -p "${EXTERNAL_DIR}"
   else
-    mkdir -p "./.swarm-docker/ext"
+    mkdir -p "./.agent-mount/ext"
   fi
 
   # Set proper permissions for container user (UID 1000)
   if command -v chown >/dev/null 2>&1; then
-    chown -R 1000:1000 "./.swarm-docker/" 2>/dev/null || echo "Warning: Could not set ownership (this is normal on some systems)"
+    chown -R 1000:1000 "./.agent-mount/" 2>/dev/null || echo "Warning: Could not set ownership (this is normal on some systems)"
   fi
 
   # Ensure directories are writable
-  chmod -R 755 "./.swarm-docker/"
+  chmod -R 755 "./.agent-mount/"
 
   echo "Created persistent directories:"
-  echo "  - ./.swarm-docker/docker_data (general data)"
-  echo "  - ./.swarm-docker/docker_data/claude-flow (claude-flow data)"
-  echo "  - ./.swarm-docker/docker_workspace (workspace files)"
-  echo "  - ./.swarm-docker/docker_analysis (analysis outputs)"
-  echo "  - ./.swarm-docker/docker_logs (container logs)"
-  echo "  - ./.swarm-docker/docker_output (processing outputs)"
-  echo "  - ./.swarm-docker/docker_latex (LaTeX projects)"
+  echo "  - ./.agent-mount/docker_data (general data)"
+  echo "  - ./.agent-mount/docker_data/claude-flow (claude-flow data)"
+  echo "  - ./.agent-mount/docker_workspace (workspace files)"
+  echo "  - ./.agent-mount/docker_analysis (analysis outputs)"
+  echo "  - ./.agent-mount/docker_logs (container logs)"
+  echo "  - ./.agent-mount/docker_output (processing outputs)"
+  echo "  - ./.agent-mount/docker_latex (LaTeX projects)"
   if [[ -n "${EXTERNAL_DIR}" ]]; then
     echo "  - ${EXTERNAL_DIR} (external files)"
   else
-    echo "  - ./.swarm-docker/ext (external files)"
+    echo "  - ./.agent-mount/ext (external files)"
   fi
 
   # Create network if it doesn't exist
@@ -332,13 +332,13 @@ Usage: $0 {build|start|daemon|exec|logs|health|stop|rm|restart|watch|status|clea
                  $0 persist
 
 Data Persistence:
-  - Analysis outputs: ./.swarm-docker/docker_analysis/
-  - Container logs: ./.swarm-docker/docker_logs/
-  - Processing outputs: ./.swarm-docker/docker_output/
-  - LaTeX projects: ./.swarm-docker/docker_latex/
-  - Workspace files: ./.swarm-docker/docker_workspace/
-  - General data: ./.swarm-docker/docker_data/
-  - External files: ./.swarm-docker/ext/
+  - Analysis outputs: ./.agent-mount/docker_analysis/
+  - Container logs: ./.agent-mount/docker_logs/
+  - Processing outputs: ./.agent-mount/docker_output/
+  - LaTeX projects: ./.agent-mount/docker_latex/
+  - Workspace files: ./.agent-mount/docker_workspace/
+  - General data: ./.agent-mount/docker_data/
+  - External files: ./.agent-mount/ext/
 EOF
 }
 
@@ -355,6 +355,7 @@ build() {
 
   export DOCKER_BUILDKIT=1
   docker build \
+    --network=host \
     --progress=plain \
     --secret id=GH_TOKEN,env=GH_TOKEN \
     -t "$IMAGE" . "${@:2}"
@@ -399,23 +400,23 @@ persist() {
 
   # Create timestamped backup directory
   TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-  BACKUP_DIR="./.swarm-docker/docker_analysis/backup_${TIMESTAMP}"
+  BACKUP_DIR="./.agent-mount/docker_analysis/backup_${TIMESTAMP}"
   mkdir -p "$BACKUP_DIR"
 
   # Copy container analysis data
   docker cp "$NAME:/home/dev/analysis/." "$BACKUP_DIR/" 2>/dev/null || echo "No analysis data found"
-  docker cp "$NAME:/home/dev/output/." "./.swarm-docker/docker_output/" 2>/dev/null || echo "No output data found"
+  docker cp "$NAME:/home/dev/output/." "./.agent-mount/docker_output/" 2>/dev/null || echo "No output data found"
 
   # Export container logs
-  docker logs "$NAME" > "./.swarm-docker/docker_logs/container_${TIMESTAMP}.log"
+  docker logs "$NAME" > "./.agent-mount/docker_logs/container_${TIMESTAMP}.log"
 
   # Export container state
   docker inspect "$NAME" > "${BACKUP_DIR}/container_state.json"
 
   echo "Data saved to:"
   echo "  - Analysis: $BACKUP_DIR/"
-  echo "  - Outputs: ./.swarm-docker/docker_output/"
-  echo "  - Logs: ./.swarm-docker/docker_logs/container_${TIMESTAMP}.log"
+  echo "  - Outputs: ./.agent-mount/docker_output/"
+  echo "  - Logs: ./.agent-mount/docker_logs/container_${TIMESTAMP}.log"
   echo "  - State: $BACKUP_DIR/container_state.json"
 }
 

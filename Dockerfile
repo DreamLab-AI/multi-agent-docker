@@ -52,27 +52,13 @@ RUN python3.12 -m venv /opt/venv312 && \
 RUN npm install -g claude-flow@alpha ruv-swarm @anthropic-ai/claude-code @openai/codex @google/gemini-cli
 
 # ---------- Install Python ML & AI libraries into the 3.12 venv ----------
-# Install in logical, separate groups to prevent "dependency hell" and resolver timeouts.
-# STEP 1: Install wgpu separately and pin its version.
-RUN /opt/venv312/bin/pip install --no-cache-dir wgpu==0.22.2
+# Copy requirements file and install dependencies to leverage Docker layer caching.
+COPY requirements.txt .
+RUN /opt/venv312/bin/pip install --no-cache-dir --retries 10 --timeout 60 --index-url https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn -r requirements.txt
 
-# STEP 2: Install the core, heavy ML frameworks with specific torch version.
-RUN /opt/venv312/bin/pip install --no-cache-dir \
-    tensorflow \
-    torch==2.7.1 torchvision torchaudio \
-    keras
-
-# STEP 3: Install other common data science libraries.
-RUN /opt/venv312/bin/pip install --no-cache-dir \
-    h2o xgboost
-
-# STEP 4: Install linters.
-RUN /opt/venv312/bin/pip install --no-cache-dir \
-    flake8 pylint
-
-# STEP 5: Install the Modular MAX runtime last. As a pre-release, it's best
+# Install the Modular MAX runtime last. As a pre-release, it's best
 # installed on its own to avoid influencing the resolution of stable packages.
-RUN /opt/venv312/bin/pip install --no-cache-dir --pre modular
+RUN /opt/venv312/bin/pip install --no-cache-dir --retries 10 --timeout 60 --index-url https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn --pre modular
 
 # ---------- Rust tool-chain (AVX‑512) ----------
 ENV PATH="/root/.cargo/bin:${PATH}"

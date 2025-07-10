@@ -12,7 +12,7 @@ This repository provides a fully containerized, high-performance development env
 - **Comprehensive AI/ML Stack**: Includes Python 3.12 with TensorFlow, PyTorch, Keras, and more, all accelerated by CUDA 12.9.
 - **GPU Accelerated**: Full NVIDIA GPU support (`--gpus all`) is enabled out-of-the-box for both ML tasks and WebGPU/Wasm workloads.
 - **Robust Security Model**: The container runs with a hardened security profile, dropping all default capabilities and only adding back what is essential for development and debugging.
-- **Persistent Data Storage**: Your workspace, data, logs, and outputs are safely persisted on the host machine in the `.swarm-docker` directory.
+- **Persistent Data Storage**: Your workspace, data, logs, and outputs are safely persisted on the host machine in the `.agent-mount` directory.
 - **Helper Script**: The `swarm.sh` script simplifies all common Docker operations like building, running, and managing the container.
 - **Reproducible Environment**: A single `Dockerfile` defines the entire stack, ensuring a consistent environment for every developer.
 
@@ -28,7 +28,7 @@ graph TD
         C[NVIDIA Drivers]
         D[swarm.sh]
         E[.env file]
-        F[.swarm-docker/ Persistent Data]
+        F[.agent-mount/ Persistent Data]
     end
 
     subgraph Container["Docker Container"]
@@ -148,11 +148,11 @@ Security is a priority. Instead of running a wide-open container, we employ a "d
 
 ### Data Persistence & Directory Structure
 
-Your work is never lost when the container stops. All important data is mounted from the `./.swarm-docker` directory on your host machine.
+Your work is never lost when the container stops. All important data is mounted from the `./.agent-mount` directory on your host machine.
 
 ```
 .
-├── .swarm-docker/
+├── .agent-mount/
 │   ├── docker_analysis/  # For analysis outputs
 │   ├── docker_data/      # For general persistent data
 │   │   └── claude-flow/  # Specific data for claude-flow
