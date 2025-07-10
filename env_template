@@ -14,7 +14,7 @@ CLAUDE_FLOW_LOG_LEVEL=info
 CLAUDE_FLOW_DEBUG=false
 
 # Directory Configuration
-EXTERNAL_DIR="/mnt/projects"
+EXTERNAL_DIR=""
 WASMEDGE_PLUGIN_PATH="/usr/local/lib/wasmedge"
 
 # Resource Limits (optional overrides)

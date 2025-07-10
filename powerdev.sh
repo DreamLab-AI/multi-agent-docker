@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# swarm.sh  –  helper for the claude-flow@alpha powered development container
+# powerdev.sh  –  helper for the claude-flow@alpha powered development container
 set -euo pipefail
 
 IMAGE=powerdev:latest
-NAME=swarm_container
+NAME=powerdev
 ENVFILE=.env     # ← update to match your actual env file
 
 # Source the .env file to make variables available to the script
@@ -490,7 +490,7 @@ watch() {
 _powerdev_completion() {
   COMPREPLY=($(compgen -W "build start daemon exec logs health status stop rm restart watch cleanup persist" -- "${COMP_WORDS[COMP_CWORD]}"))
 }
-complete -F _powerdev_completion swarm.sh
+complete -F _powerdev_completion powerdev.sh
 
 # ---- Graceful shutdown handler ---------------------
 trap 'echo "Shutting down..."; stop 2>/dev/null; exit' SIGINT SIGTERM

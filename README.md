@@ -13,7 +13,7 @@ This repository provides a fully containerized, high-performance development env
 - **GPU Accelerated**: Full NVIDIA GPU support (`--gpus all`) is enabled out-of-the-box for both ML tasks and WebGPU/Wasm workloads.
 - **Robust Security Model**: The container runs with a hardened security profile, dropping all default capabilities and only adding back what is essential for development and debugging.
 - **Persistent Data Storage**: Your workspace, data, logs, and outputs are safely persisted on the host machine in the `.agent-mount` directory.
-- **Helper Script**: The `swarm.sh` script simplifies all common Docker operations like building, running, and managing the container.
+- **Helper Script**: The `powerdev.sh` script simplifies all common Docker operations like building, running, and managing the container.
 - **Reproducible Environment**: A single `Dockerfile` defines the entire stack, ensuring a consistent environment for every developer.
 
 ## 🏗️ Architecture Overview
@@ -26,7 +26,7 @@ graph TD
         A[Your Files]
         B[Docker Daemon]
         C[NVIDIA Drivers]
-        D[swarm.sh]
+        D[powerdev.sh]
         E[.env file]
         F[.agent-mount/ Persistent Data]
     end
@@ -59,7 +59,7 @@ graph TD
 
 - **Docker**: The latest version of Docker Engine.
 - **NVIDIA GPU Drivers**: Required on the host machine for GPU acceleration inside the container.
-- **Bash-compatible Shell**: For running the `swarm.sh` script (e.g., bash, zsh).
+- **Bash-compatible Shell**: For running the `powerdev.sh` script (e.g., bash, zsh).
 
 ## 🚀 Quick Start
 
@@ -79,15 +79,15 @@ graph TD
 3.  **Build the Image**:
     This command builds the Docker image. It only needs to be run once or when the `Dockerfile` changes.
     ```bash
-    ./swarm.sh build
+    ./powerdev.sh build
     ```
 
 4.  **Start the Container**:
     This command starts the container in interactive mode.
     ```bash
-    ./swarm.sh start
+    ./powerdev.sh start
     ```
-    *Alternatively, to run it in the background, use `./swarm.sh daemon`.*
+    *Alternatively, to run it in the background, use `./powerdev.sh daemon`.*
 
 5.  **Access the UI**:
     Open your browser and navigate to **[http://localhost:3000](http://localhost:3000)** to access the `claude-flow` web interface.
@@ -95,10 +95,10 @@ graph TD
 6.  **Enter the Container**:
     To get a shell inside the running container, use:
     ```bash
-    ./swarm.sh exec bash
+    ./powerdev.sh exec bash
     ```
 
-## 🧰 The `swarm.sh` Helper Script
+## 🧰 The `powerdev.sh` Helper Script
 
 This script is your main entry point for managing the environment.
 
@@ -161,7 +161,7 @@ Your work is never lost when the container stops. All important data is mounted 
 │   ├── docker_workspace/ # A persistent workspace inside the container
 │   └── ext/              # Mount point for external projects (see below)
 ├── Dockerfile
-├── swarm.sh
+├── powerdev.sh
 ├── env_template
 └── README.md
 ```
@@ -185,47 +185,47 @@ Here are the most common workflow patterns for using this environment:
 # 1. First time setup
 cp env_template .env
 nano .env                    # Configure your API keys
-./swarm.sh build            # Build the Docker image (takes 5-10 minutes)
-./swarm.sh start             # Start interactive container
+./powerdev.sh build            # Build the Docker image (takes 5-10 minutes)
+./powerdev.sh start             # Start interactive container
 
 # 2. Access the environment
 # Web UI: http://localhost:3000
-# Shell: ./swarm.sh exec bash
+# Shell: ./powerdev.sh exec bash
 ```
 
 #### **Daily Development**
 ```bash
 # Start your development session
-./swarm.sh daemon            # Run container in background
-./swarm.sh status            # Check container health
-./swarm.sh exec bash         # Get a shell for development
+./powerdev.sh daemon            # Run container in background
+./powerdev.sh status            # Check container health
+./powerdev.sh exec bash         # Get a shell for development
 
 # Monitor and troubleshoot
-./swarm.sh logs              # View container logs
-./swarm.sh health            # Check health status
+./powerdev.sh logs              # View container logs
+./powerdev.sh health            # Check health status
 ```
 
 #### **Maintenance & Cleanup**
 ```bash
 # Regular maintenance
-./swarm.sh persist           # Backup analysis data
-./swarm.sh restart           # Restart unhealthy container
-./swarm.sh cleanup           # Clean up Docker resources
+./powerdev.sh persist           # Backup analysis data
+./powerdev.sh restart           # Restart unhealthy container
+./powerdev.sh cleanup           # Clean up Docker resources
 
 # Complete reset
-./swarm.sh stop              # Stop container
-./swarm.sh rm                # Remove container
-./swarm.sh build             # Rebuild image (if needed)
+./powerdev.sh stop              # Stop container
+./powerdev.sh rm                # Remove container
+./powerdev.sh build             # Rebuild image (if needed)
 ```
 
 #### **Production Monitoring**
 ```bash
 # Continuous monitoring
-./swarm.sh watch             # Auto-restart on failure (runs indefinitely)
+./powerdev.sh watch             # Auto-restart on failure (runs indefinitely)
 
 # Manual monitoring
-./swarm.sh status            # Detailed status report
-./swarm.sh health            # Quick health check
+./powerdev.sh status            # Detailed status report
+./powerdev.sh health            # Quick health check
 ```
 
 ### Using `claude-flow`
@@ -236,7 +236,7 @@ nano .env                    # Configure your API keys
 -   **CLI**: Use the CLI from within the container for scripting and quick actions.
     ```bash
     # Get a shell inside the container
-    ./swarm.sh exec bash
+    ./powerdev.sh exec bash
 
     # Check the system status
     claude-flow status --detailed
@@ -257,16 +257,16 @@ To work on an existing project from your host machine, set the `EXTERNAL_DIR` va
 EXTERNAL_DIR="/path/to/my/project"
 ```
 
-Now, when you run `./swarm.sh start`, your project will be available inside the container at `/workspace/ext`.
+Now, when you run `./powerdev.sh start`, your project will be available inside the container at `/workspace/ext`.
 
 ## ⁉️ Troubleshooting
 
 -   **Error: "Docker daemon not accessible"**: Ensure the Docker daemon is running on your host machine.
--   **Permission Denied on `./swarm.sh`**: Run `chmod +x swarm.sh` to make the script executable.
+-   **Permission Denied on `./powerdev.sh`**: Run `chmod +x powerdev.sh` to make the script executable.
 -   **`claude-flow` UI not loading**:
-    1.  Check container logs with `./swarm.sh logs`.
-    2.  Ensure the container is running with `./swarm.sh status`.
+    1.  Check container logs with `./powerdev.sh logs`.
+    2.  Ensure the container is running with `./powerdev.sh status`.
     3.  Check if another service is using port 3000 on your host.
 -   **GPU not detected**:
     1.  Verify NVIDIA drivers are correctly installed on the host.
-    2.  Ensure you haven't commented out the `--gpus all` flag in `swarm.sh`.
+    2.  Ensure you haven't commented out the `--gpus all` flag in `powerdev.sh`.
