@@ -248,6 +248,37 @@ nano .env                    # Configure your API keys
     claude-flow task create implementation "Build a REST API using Flask"
     ```
 
+### Advanced `claude-flow` Setup (Manual Initialization)
+
+For more granular control, you can initialize the `claude-flow` services manually using `tmux`. This is useful for debugging or running custom configurations.
+
+1.  **Start the Core Services**:
+    First, ensure the main container is running.
+    ```bash
+    ./powerdev.sh start
+    ```
+
+2.  **Initialize `claude-flow`**:
+    This command sets up `claude-flow` for the first time.
+    ```bash
+    # One-shot upgrade and setup
+    tmux new-session -d -s claude-flow-server -n claude-flow-server 'npx --y claude-flow@alpha init --force'
+    ```
+
+3.  **Configure the Swarm**:
+    Use the wizard to configure the agent swarm.
+    ```bash
+    # Run in a new tmux session
+    tmux new-session -s flow-wizard -n flow-wizard 'claude-flow hive-mind wizard'
+    ```
+
+4.  **Spawn the Hive Mind**:
+    Finally, start the hive mind to begin processing tasks.
+    ```bash
+    # Run in another tmux session
+    tmux new-session -d -s claude-flow-server -n claude-flow-server 'claude-flow hive-mind spawn "task here" --claude'
+    ```
+
 ### Working with External Projects
 
 To work on an existing project from your host machine, set the `EXTERNAL_DIR` variable in your `.env` file:
