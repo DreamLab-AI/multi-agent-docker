@@ -20,6 +20,51 @@ This repository provides a fully containerized, high-performance development env
 
 The environment is designed with clear separation between the host, the container, and the services running inside.
 
+### Blender MCP Integration Architecture
+
+The Blender integration is a key feature of this environment, enabling powerful AI-driven 3D workflows. It consists of a headless Blender instance, a custom MCP server running as a Blender addon, and a set of scripts to manage the process.
+
+```mermaid
+graph TD
+    subgraph "Host Machine"
+        direction LR
+        A[Claude Code]
+        B[Docker Daemon]
+    end
+
+    subgraph "Docker Container"
+        direction TB
+        subgraph "Services"
+            C[Claude Flow UI on Port 3000]
+            D[Blender Headless Process]
+        end
+        E[Xvfb Virtual Display on :99]
+        F[Blender MCP Server on Port 9876]
+    end
+
+    A -- "TCP/IP" --> F
+    B -- "Manages" --> E
+    B -- "Manages" --> C
+    B -- "Manages" --> D
+    D -- "Runs" --> F
+    D -- "Uses" --> E
+```
+
+**Key Components:**
+
+-   **Blender Headless Process**: A full instance of Blender 4.5 LTS running in the background without a graphical user interface.
+-   **Blender MCP Server**: A custom Python script running as an addon within Blender. It opens a TCP socket on port 9876 to listen for commands.
+-   **Xvfb (X Virtual Framebuffer)**: A virtual display server that allows Blender to perform rendering operations headlessly.
+-   **Claude Code**: The client application that connects to the Blender MCP server to send commands and receive results.
+-   **Claude Flow UI**: The main web interface for managing tasks and agents, running on port 3000.
+
+**Communication Flow:**
+
+1.  **Startup**: The `entrypoint.sh` script starts the Xvfb virtual display and then launches the Blender headless process. The `keep_alive.py` script, executed by Blender, starts the MCP server.
+2.  **Connection**: A client, such as Claude Code, establishes a TCP connection to the Blender MCP server on port 9876.
+3.  **Command Execution**: The client sends a JSON-formatted command to the server. The server receives the command in a separate thread and uses Blender's `bpy.app.timers` to safely execute it in the main thread, preventing crashes.
+4.  **Response**: The result of the command is sent back to the client as a JSON response.
+
 ```mermaid
 graph TD
     subgraph Host["Host Machine"]
