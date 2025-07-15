@@ -133,6 +133,7 @@ This script is your main entry point for managing the environment.
 | **Node.js 22 LTS**| `claude-flow@alpha`, `ruv-swarm`, and other global CLIs.                                                                                                                            |
 | **Wasm / WebGPU** | WasmEdge 0.14 (+WASI-NN OpenVINO), OpenVINO 2025 runtime, Vulkan/OpenCL loaders.                                                                                                    |
 | **System & Linters**| `git`, `tmux`, `shellcheck`, `hadolint`, `hyperfine`, `docker-ce` (for DinD).                                                                                                       |
+| **3D Modeling**   | **Blender 4.5 LTS**: Headless instance with custom MCP server for bi-directional communication.                                                                                       |
 
 ### Security Model
 
@@ -301,3 +302,106 @@ Now, when you run `./powerdev.sh start`, your project will be available inside t
 -   **GPU not detected**:
     1.  Verify NVIDIA drivers are correctly installed on the host.
     2.  Ensure you haven't commented out the `--gpus all` flag in `powerdev.sh`.
+
+
+Inside the container or on your host machine with Claude Code installed:
+
+```bash
+# Add the Blender MCP server
+claude mcp add blender uvx blender-mcp
+```
+
+### 3. Test the Connection
+
+In Claude Code, you can now use Blender MCP tools:
+- `mcp__blender__get_scene_info` - Get current scene information
+- `mcp__blender__execute_blender_code` - Execute Python code in Blender
+- `mcp__blender__get_viewport_screenshot` - Capture viewport screenshots
+- And many more...
+
+## How It Works
+
+### Socket-Based Architecture
+
+The Blender MCP addon uses a **socket server with thread-safe command queueing** to handle commands in headless mode:
+
+1. **Client connects** to `localhost:9876`
+2. **Socket thread** receives JSON commands
+3. **Commands are queued** using Blender's timer system
+4. **Main thread executes** commands safely
+5. **Response sent back** through socket
+
+This architecture solves the critical issue of Blender's timer system not working in headless mode without an event loop.
+
+### Key Components
+
+#### Blender Addon (`addon.py`)
+- Implements a TCP socket server
+- Uses `bpy.app.timers.register()` for thread-safe execution
+- Handles all Blender API calls in the main thread
+- Supports multiple concurrent connections
+
+#### Keep-Alive Script (`keep_alive.py`)
+- Starts the MCP server using Blender operators
+- Maintains an infinite loop to prevent Blender from exiting
+- Handles graceful shutdown on interruption
+
+#### Entrypoint Script (`entrypoint.sh`)
+- Sets up Xvfb virtual display for headless rendering
+- Starts all required services (Blender, Claude Flow, etc.)
+- Manages process lifecycle and logging
+
+## Environment Variables
+
+- `BLENDER_VERSION`: Blender version (default: 4.5)
+- `BLENDER_PATH`: Installation path (default: /usr/local/blender)
+- `DISPLAY`: X11 display for rendering (default: :99)
+
+## Ports
+
+- **9876**: Blender MCP socket server
+- **3000**: Claude Flow UI
+- **3001**: Additional services
+
+## GPU Support
+
+The container includes CUDA support for GPU rendering. Uncomment the GPU section in `docker-compose.yml` if you have an NVIDIA GPU.
+
+## Troubleshooting
+
+### Connection Issues
+1. Check if Blender is running: `ps aux | grep blender`
+2. Verify port is open: `lsof -i :9876`
+3. Check logs: `tail -f /var/log/blender-mcp.log`
+
+### MCP Tools Not Working
+1. Ensure MCP server is configured: `claude mcp list`
+2. Test connection: `telnet localhost 9876`
+3. Restart services: `docker-compose restart`
+
+## Advanced Usage
+
+### Custom Blender Scripts
+Place Python scripts in `/workspace` and execute them:
+```python
+# Using MCP tool
+mcp__blender__execute_blender_code(code="exec(open('/workspace/my_script.py').read())")
+```
+
+### Batch Processing
+The container supports batch operations for rendering, asset generation, etc.
+
+### Integration with Claude Flow
+Use the swarm orchestration tools to coordinate complex Blender workflows with AI agents.
+
+## Security Notes
+
+- The container runs as non-root user `dev`
+- Blender MCP only accepts connections from localhost
+- All file operations are sandboxed within the container
+
+## Performance Optimization
+
+- Uses thread pooling for concurrent connections
+- Commands are queued and processed efficiently
+- Xvfb provides hardware-accelerated rendering when possible

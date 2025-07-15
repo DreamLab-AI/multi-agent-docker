@@ -24,7 +24,7 @@
 | **Node 22 LTS** | PRIMARY: `claude-flow@alpha`, supporting: `ruv-swarm` |
 | **Linters** | `shellcheck`, `flake8`, `pylint`, `hadolint` |
 | **LaTeX** | `texlive-full`, `latexmk`, `chktex` |
-| **Extras** | `tmux`, `hyperfine`, `docker`, `WasmEdge`, `OpenVINO`, `Modular MAX` |
+| **Extras** | `tmux`, `hyperfine`, `docker`, `WasmEdge`, `OpenVINO`, `Modular MAX`, `Blender` |
 | **Web UI** | Claude-Flow UI → **http://localhost:3000** (PRIMARY INTERFACE) |
 
 ### Quick env switches:
@@ -68,7 +68,24 @@ mcp__ruv-swarm__agent_spawn      { type:"coder", model:"tcn-detector", pattern:"
 mcp__ruv-swarm__task_orchestrate { task:"Build REST API", strategy:"adaptive" }
 ```
 
-### 3.3 LaTeX Environment
+### 3.3 Blender Headless Environment
+- **Version**: Blender 4.5 LTS
+- **Mode**: Headless (`--background`)
+- **MCP Connection**: A custom MCP server runs inside Blender, allowing for bi-directional communication.
+- **Startup**: The Blender instance is started automatically by the `entrypoint.sh` script when the container starts.
+
+Example workflow:
+```bash
+# The entrypoint.sh script handles the startup of Blender.
+# You can interact with Blender via MCP tools.
+# For example, to get scene info:
+mcp__blender__get_scene_info
+
+# To execute a python script in blender:
+mcp__blender__execute_blender_code 'import bpy; bpy.ops.mesh.primitive_cube_add()'
+```
+
+### 3.4 LaTeX Environment
 - **Full Distribution**: `texlive-full` is installed.
 - **Build Tool**: Use `latexmk` for easy compilation.
 - **Linter**: Use `chktex` to check for common errors.

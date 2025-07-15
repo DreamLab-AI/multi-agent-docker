@@ -4,16 +4,36 @@
 FROM nvidia/cuda:12.9.0-cudnn-devel-ubuntu24.04 AS base
 
 ################################################################################
-# Stage 1 – OS deps, Python 3.12 & 3.13 venvs, Rust, Node, ML stack, WasmEdge
+# Stage 1 – OS deps, Python 3.12 & 3.13 venvs, Rust, Node, ML stack, WasmEdge, Blender
 ################################################################################
 ARG DEBIAN_FRONTEND=noninteractive
 
-# ---------- Core build tools, Linters, Python, Node, Wasm deps ----------
+# 1. Set Environment Variables for Blender
+# Set the Blender version and create a directory for it.
+ARG BLENDER_DOWNLOAD_URL
+ENV BLENDER_VERSION 4.5
+ENV BLENDER_PATH /usr/local/blender
+
+# Set the application workspace directory
+ENV APP_HOME /app
+WORKDIR $APP_HOME
+
+# 2. Install Dependencies
+# Add any dependencies needed to run Blender and its Python environment.
+# wget and other utilities are for downloading and extracting Blender.
 RUN --mount=type=cache,target=/var/cache/apt \
     apt-get update && \
-    # Install Docker dependencies
     apt-get install -y --no-install-recommends \
-      ca-certificates curl gnupg && \
+      wget libxi6 libxxf86vm1 libxfixes3 libxrender1 \
+      build-essential clang curl git pkg-config ca-certificates gnupg libssl-dev \
+      software-properties-common lsb-release shellcheck hyperfine openssh-client tmux sudo \
+      docker-ce docker-ce-cli containerd.io unzip 7zip texlive-full latexmk chktex \
+      # Additional Blender dependencies for headless operation
+      libgl1-mesa-glx libglu1-mesa libglib2.0-0 libsm6 libxext6 \
+      libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 \
+      # X11 virtual framebuffer for headless rendering
+      xvfb && \
+    # Add Docker dependencies
     install -m 0755 -d /etc/apt/keyrings && \
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
     chmod a+r /etc/apt/keyrings/docker.gpg && \
@@ -22,11 +42,6 @@ RUN --mount=type=cache,target=/var/cache/apt \
       "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
       tee /etc/apt/sources.list.d/docker.list > /dev/null && \
     apt-get update && \
-    # Core build tools, Linters, Python, Node, Wasm deps, and Docker
-    apt-get install -y --no-install-recommends \
-      build-essential clang curl git pkg-config ca-certificates gnupg libssl-dev \
-      wget software-properties-common lsb-release shellcheck hyperfine openssh-client tmux sudo \
-      docker-ce docker-ce-cli containerd.io unzip 7zip texlive-full latexmk chktex && \
     # Add Deadsnakes PPA for newer Python versions
     add-apt-repository -y ppa:deadsnakes/ppa && \
     # Add NodeSource repository for up-to-date NodeJS (v22+)
@@ -38,9 +53,38 @@ RUN --mount=type=cache,target=/var/cache/apt \
       python3.13 python3.13-venv python3.13-dev \
       nodejs \
       libvulkan1 vulkan-tools ocl-icd-libopencl1 && \
+    rm -rf /var/lib/apt/lists/* && \
     # Linters
     wget -O /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 && \
     chmod +x /usr/local/bin/hadolint
+
+# 3. Install Blender
+# Download and extract the specified Blender LTS version.
+# Use default URL if not provided
+RUN BLENDER_URL=${BLENDER_DOWNLOAD_URL:-"https://mirror.clarkson.edu/blender/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz"} && \
+    wget "${BLENDER_URL}" -O blender.tar.xz && \
+    tar -xf blender.tar.xz && \
+    mv blender-${BLENDER_VERSION}.0-linux-x64 ${BLENDER_PATH} && \
+    rm blender.tar.xz
+
+# 4. Create addon directory and copy files later
+# We'll copy the addon files after creating the proper directory structure
+RUN mkdir -p ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons
+
+# 5. Install the MCP Server Package
+# Install blender-mcp from PyPI using Blender's Python
+RUN ${BLENDER_PATH}/${BLENDER_VERSION}/python/bin/python -m ensurepip && \
+    ${BLENDER_PATH}/${BLENDER_VERSION}/python/bin/python -m pip install --upgrade pip && \
+    ${BLENDER_PATH}/${BLENDER_VERSION}/python/bin/python -m pip install blender-mcp
+
+# 6. Set PYTHONPATH for Blender integration
+ENV PYTHONPATH "${APP_HOME}:${PYTHONPATH}"
+
+# 7. Copy startup and addon files
+# Note: These files will be copied from the build context
+COPY *.py $APP_HOME/
+COPY entrypoint.sh /
+RUN chmod +x /entrypoint.sh
 
 # ---------- Create Python virtual environments & install global node packages ----------
 RUN python3.12 -m venv /opt/venv312 && \
@@ -127,4 +171,6 @@ ENV WASMEDGE_PLUGIN_PATH="/usr/local/lib/wasmedge"
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD ["sh", "-c", "command -v max >/dev/null"] || exit 1
 
-CMD ["/bin/bash", "-c", "tmux new-session -d -s claude-flow 'claude-flow start --ui --port 3000' && tmux new-session -d -s mcp 'ruv-swarm mcp start --protocol=stdio' && echo 'Services started: claude-flow UI on port 3000, ruv-swarm MCP server' && /bin/bash"]
+# Start via entrypoint.sh which handles all services including Blender MCP
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["--interactive"]
