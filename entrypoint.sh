@@ -1,23 +1,34 @@
 #!/bin/bash
 set -e
 
-echo "--- Starting Headless Blender MCP Container ---"
+echo "--- Initializing Claude Flow and Ruv Swarm ---"
+npx claude-flow@alpha init --force
+npx ruv-swarm@latest init --claude
+echo "--- Initialization Complete ---"
 
-# The command to start Blender headlessly
-# --background: Runs Blender without a GUI.
-# --python-use-system-env: Ensures Blender uses the container's Python environment.
-# --addons addon: Enables our modified addon.
-# --python /app/keep_alive.py: Runs our keep-alive script inside Blender.
-# --: Separator for passing arguments to the Python script.
-# --blendermcp-autostart: A flag for our script to start the server.
-# --blendermcp-port 9876: The port for the MCP server.
+echo "--- Starting Headless Blender MCP Container in background ---"
 
+# Start Blender in the background
 ${BLENDER_PATH}/blender \
     --background \
-    --addons addon \
     --python /app/keep_alive.py \
     -- \
     --blendermcp-autostart \
-    --blendermcp-port 9876
+    --blendermcp-port 9876 &
 
-echo "--- Blender MCP Container Started ---"
+echo "--- Blender MCP process started in the background ---"
+
+# First run logic for interactive session
+FIRST_RUN_MARKER="/home/dev/.first_run_complete"
+if [ ! -f "$FIRST_RUN_MARKER" ]; then
+    echo "--- First run: setting up Claude login in tmux ---"
+    touch "$FIRST_RUN_MARKER"
+    # Create a detached tmux session, run login, then leave a shell open
+    tmux new-session -d -s main "claude --dangerously-skip-permissions; exec bash -l"
+    # Attach to the session, making it the main process
+    exec tmux attach-session -t main
+else
+    echo "--- Subsequent run: starting shell ---"
+    # On subsequent runs, just start a login shell
+    exec bash -l
+fi

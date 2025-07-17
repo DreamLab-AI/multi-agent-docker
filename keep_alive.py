@@ -20,7 +20,10 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
-# Start the MCP server
+# Enable the addon and start the MCP server
+print("Enabling Blender MCP Server addon...")
+bpy.ops.preferences.addon_enable(module="blender_mcp_server")
+
 print("Starting Blender MCP Server...")
 bpy.ops.blendermcp.start_server()
 

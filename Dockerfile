@@ -70,7 +70,7 @@ RUN BLENDER_URL=${BLENDER_DOWNLOAD_URL:-"https://mirror.clarkson.edu/blender/rel
 
 # 4. Create addon directory and copy files later
 # We'll copy the addon files after creating the proper directory structure
-RUN mkdir -p ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/addon
+RUN mkdir -p ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/blender_mcp_server
 
 # 5. Install the MCP Server Package Dependencies
 # Install dependencies for the addon using Blender's Python
@@ -83,7 +83,7 @@ ENV PYTHONPATH="${APP_HOME}"
 
 # 7. Copy startup and addon files
 # Note: These files will be copied from the build context
-COPY addon.py ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/addon/__init__.py
+COPY addon.py ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/blender_mcp_server/__init__.py
 COPY keep_alive.py $APP_HOME/
 COPY entrypoint.sh /
 COPY entrypoint.sh /
