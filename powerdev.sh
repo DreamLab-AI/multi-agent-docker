@@ -65,6 +65,8 @@ setup_run_opts() {
     --privileged # Required for Docker-in-Docker but constrained by caps
     # Claude Flow web interface
     -p 3000:3000
+    # Allow container to connect to host services
+    --add-host=host.docker.internal:host-gateway
     # Environment variables for claude-flow
     -e CLAUDE_FLOW_PORT=3000
     -e CLAUDE_FLOW_HOST=0.0.0.0

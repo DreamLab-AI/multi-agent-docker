@@ -96,7 +96,7 @@ RUN python3.12 -m venv /opt/venv312 && \
     /opt/venv313/bin/pip install --upgrade pip wheel setuptools
 
 # ---------- Install global CLI tools with claude-flow@alpha as primary ----------
-RUN npm install -g claude-flow@alpha ruv-swarm @anthropic-ai/claude-code @openai/codex @google/gemini-cli
+RUN npm install -g claude-flow@alpha ruv-swarm @anthropic-ai/claude-code @google/gemini-cli @openai/codex
 
 # ---------- Install Python ML & AI libraries into the 3.12 venv ----------
 # Copy requirements file and install dependencies to leverage Docker layer caching.
@@ -121,6 +121,9 @@ RUN apt-get update && \
     . "$HOME/.cargo/env" && \
     cargo install cargo-edit
 ENV RUSTFLAGS="-C target-cpu=skylake-avx512 -C target-feature=+avx2,+avx512f,+avx512bw,+avx512dq"
+
+# ---------- Install uv (fast python package manager) ----------
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # ---------- GPU‑accelerated Wasm stack (WasmEdge) ----------
 RUN curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install.sh | \

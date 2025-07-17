@@ -10,14 +10,14 @@ services:
     image: blender-mcp-dev:latest
     container_name: blender-mcp-container
     
-    # GPU support (uncomment if you have NVIDIA GPU)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+     GPU support (uncomment if you have NVIDIA GPU)
+     deploy:
+       resources:
+         reservations:
+           devices:
+             - driver: nvidia
+               count: all
+               capabilities: [gpu]
     
     environment:
       - DISPLAY=:99

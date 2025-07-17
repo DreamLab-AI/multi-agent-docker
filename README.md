@@ -175,9 +175,9 @@ This script is your main entry point for managing the environment.
 | **Python 3.13**   | Clean sandbox for testing (`pip`, `setuptools`, `wheel` only).                                                                                                                      |
 | **CUDA + cuDNN**  | Full GPU acceleration (`/usr/local/cuda`) for ML and compute tasks.                                                                                                                 |
 | **Rust Toolchain**| `rustup`, `clippy`, `rustfmt`, `cargo-edit`, `sccache`. Optimized for `skylake-avx512`.                                                                                              |
-| **Node.js 22 LTS**| `claude-flow@alpha`, `ruv-swarm`, and other global CLIs.                                                                                                                            |
+| **Node.js 22 LTS**| `claude-flow@alpha`, `ruv-swarm`, `vite`, `typescript`, `eslint`, `prettier`, `jest`, `storybook`, and other global CLIs.                                                                                                                            |
 | **Wasm / WebGPU** | WasmEdge 0.14 (+WASI-NN OpenVINO), OpenVINO 2025 runtime, Vulkan/OpenCL loaders.                                                                                                    |
-| **System & Linters**| `git`, `tmux`, `shellcheck`, `hadolint`, `hyperfine`, `docker-ce` (for DinD).                                                                                                       |
+| **System & Linters**| `git`, `tmux`, `shellcheck`, `hadolint`, `hyperfine`, `docker-ce` (for DinD), `uv`.                                                                                                       |
 | **3D Modeling**   | **Blender 4.5 LTS**: Headless instance with custom MCP server for bi-directional communication.                                                                                       |
 
 ### Security Model
@@ -191,6 +191,7 @@ Security is a priority. Instead of running a wide-open container, we employ a "d
 -   **User Isolation**: The container runs as a non-root user (`dev`, UID/GID 1000) to minimize risk.
 -   **Read-Only Mounts**: The host's `.ssh` directory is mounted read-only to prevent modification from within the container.
 -   **Unconfined Profiles**: `apparmor:unconfined` and `seccomp:unconfined` are enabled to allow for flexible development and package installation, representing a trade-off for developer productivity in a trusted environment.
+-   **Host Networking**: The container can connect to services running on the host via `host.docker.internal`.
 
 ### Data Persistence & Directory Structure
 

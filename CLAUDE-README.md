@@ -21,10 +21,10 @@
 | **Python 3.13** | Clean sandbox (`pip`, `setuptools`, `wheel`) |
 | **CUDA + cuDNN** | `/usr/local/cuda` ready |
 | **Rust** | `rustup`, `clippy`, `cargo-edit`, `sccache` |
-| **Node 22 LTS** | PRIMARY: `claude-flow@alpha`, supporting: `ruv-swarm` |
+| **Node 22 LTS** | PRIMARY: `claude-flow@alpha`, supporting: `ruv-swarm`, `vite`, `typescript`, `eslint`, `prettier`, `jest`, `storybook` |
 | **Linters** | `shellcheck`, `flake8`, `pylint`, `hadolint` |
 | **LaTeX** | `texlive-full`, `latexmk`, `chktex` |
-| **Extras** | `tmux`, `hyperfine`, `docker`, `WasmEdge`, `OpenVINO`, `Modular MAX`, `Blender` |
+| **Extras** | `tmux`, `hyperfine`, `docker`, `WasmEdge`, `OpenVINO`, `Modular MAX`, `Blender`, `uv` |
 | **Web UI** | Claude-Flow UI → **http://localhost:3000** (PRIMARY INTERFACE) |
 
 ### Quick env switches:
