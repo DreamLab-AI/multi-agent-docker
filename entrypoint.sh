@@ -14,7 +14,6 @@ echo "--- Starting Headless Blender MCP Container ---"
 
 ${BLENDER_PATH}/blender \
     --background \
-    --python-use-system-env \
     --addons addon \
     --python /app/keep_alive.py \
     -- \

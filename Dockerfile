@@ -11,44 +11,45 @@ ARG DEBIAN_FRONTEND=noninteractive
 # 1. Set Environment Variables for Blender
 # Set the Blender version and create a directory for it.
 ARG BLENDER_DOWNLOAD_URL
-ENV BLENDER_VERSION 4.5
-ENV BLENDER_PATH /usr/local/blender
+ENV BLENDER_VERSION="4.5"
+ENV BLENDER_PATH="/usr/local/blender"
 
 # Set the application workspace directory
-ENV APP_HOME /app
+ENV APP_HOME="/app"
 WORKDIR $APP_HOME
 
 # 2. Install Dependencies
 # Add any dependencies needed to run Blender and its Python environment.
 # wget and other utilities are for downloading and extracting Blender.
-RUN --mount=type=cache,target=/var/cache/apt \
-    apt-get update && \
+RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      wget libxi6 libxxf86vm1 libxfixes3 libxrender1 \
-      build-essential clang curl git pkg-config ca-certificates gnupg libssl-dev \
-      software-properties-common lsb-release shellcheck hyperfine openssh-client tmux sudo \
-      docker-ce docker-ce-cli containerd.io unzip 7zip texlive-full latexmk chktex \
-      # Additional Blender dependencies for headless operation
-      libgl1-mesa-glx libglu1-mesa libglib2.0-0 libsm6 libxext6 \
-      libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 \
-      # X11 virtual framebuffer for headless rendering
-      xvfb && \
-    # Add Docker dependencies
-    install -m 0755 -d /etc/apt/keyrings && \
+    ca-certificates curl gnupg software-properties-common
+# Add Docker's official GPG key
+RUN install -m 0755 -d /etc/apt/keyrings && \
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
-    chmod a+r /etc/apt/keyrings/docker.gpg && \
-    echo \
+    chmod a+r /etc/apt/keyrings/docker.gpg
+# Set up the repository
+RUN echo \
       "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
       "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
-      tee /etc/apt/sources.list.d/docker.list > /dev/null && \
-    apt-get update && \
-    # Add Deadsnakes PPA for newer Python versions
-    add-apt-repository -y ppa:deadsnakes/ppa && \
-    # Add NodeSource repository for up-to-date NodeJS (v22+)
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get update && \
-    # Install Python, Node, and GPU/Wasm dependencies
+      tee /etc/apt/sources.list.d/docker.list > /dev/null
+# Add Deadsnakes PPA for newer Python versions
+RUN add-apt-repository -y ppa:deadsnakes/ppa
+# Add NodeSource repository for up-to-date NodeJS (v22+)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+# Install all packages
+RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+      wget libxi6 libxxf86vm1 libxfixes3 libxrender1 \
+      build-essential clang git pkg-config libssl-dev \
+      lsb-release shellcheck hyperfine openssh-client tmux sudo \
+      docker-ce docker-ce-cli containerd.io unzip 7zip texlive-full latexmk chktex \
+      # Additional Blender dependencies for headless operation
+      libgl1 libglu1-mesa libglib2.0-0 libsm6 libxext6 \
+      libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 \
+      # X11 virtual framebuffer for headless rendering
+      xvfb \
+      # Python, Node, and GPU/Wasm dependencies
       python3.12 python3.12-venv python3.12-dev \
       python3.13 python3.13-venv python3.13-dev \
       nodejs \
@@ -69,20 +70,22 @@ RUN BLENDER_URL=${BLENDER_DOWNLOAD_URL:-"https://mirror.clarkson.edu/blender/rel
 
 # 4. Create addon directory and copy files later
 # We'll copy the addon files after creating the proper directory structure
-RUN mkdir -p ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons
+RUN mkdir -p ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/addon
 
-# 5. Install the MCP Server Package
-# Install blender-mcp from PyPI using Blender's Python
-RUN ${BLENDER_PATH}/${BLENDER_VERSION}/python/bin/python -m ensurepip && \
-    ${BLENDER_PATH}/${BLENDER_VERSION}/python/bin/python -m pip install --upgrade pip && \
-    ${BLENDER_PATH}/${BLENDER_VERSION}/python/bin/python -m pip install blender-mcp
+# 5. Install the MCP Server Package Dependencies
+# Install dependencies for the addon using Blender's Python
+RUN /usr/local/blender/4.5/python/bin/python3.11 -m ensurepip && \
+    /usr/local/blender/4.5/python/bin/python3.11 -m pip install --upgrade pip && \
+    /usr/local/blender/4.5/python/bin/python3.11 -m pip install Pillow
 
 # 6. Set PYTHONPATH for Blender integration
-ENV PYTHONPATH "${APP_HOME}:${PYTHONPATH}"
+ENV PYTHONPATH="${APP_HOME}"
 
 # 7. Copy startup and addon files
 # Note: These files will be copied from the build context
-COPY *.py $APP_HOME/
+COPY addon.py ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/addon/__init__.py
+COPY keep_alive.py $APP_HOME/
+COPY entrypoint.sh /
 COPY entrypoint.sh /
 RUN chmod +x /entrypoint.sh
 

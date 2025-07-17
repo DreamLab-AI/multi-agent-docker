@@ -290,7 +290,7 @@ CLAUDE_MD_EOF
 
 help() {
   cat <<EOF
-Usage: $0 {build|start|daemon|exec|logs|health|stop|rm|restart|watch|status|cleanup|persist}
+Usage: $0 {build|start|daemon|exec|logs|health|stop|rm|restart|watch|status|cleanup|persist|debug}
 
   build        Build the Docker image:
                  $0 build
@@ -330,6 +330,9 @@ Usage: $0 {build|start|daemon|exec|logs|health|stop|rm|restart|watch|status|clea
 
   persist      Save analysis outputs to persistent storage:
                  $0 persist
+
+  debug        Start the container with an interactive shell for debugging:
+                 $0 debug
 
 Data Persistence:
   - Analysis outputs: ./.agent-mount/docker_analysis/
@@ -495,6 +498,13 @@ complete -F _powerdev_completion powerdev.sh
 # ---- Graceful shutdown handler ---------------------
 trap 'echo "Shutting down..."; stop 2>/dev/null; exit' SIGINT SIGTERM
 
+debug() {
+  detect_resources
+  setup_run_opts
+
+  docker run "${RUN_OPTS[@]}" --entrypoint /bin/bash --name "$NAME-debug" -it "$IMAGE"
+}
+
 # Entry point
 if [[ $# -eq 0 ]]; then
   help
@@ -502,7 +512,7 @@ if [[ $# -eq 0 ]]; then
 fi
 
 case $1 in
-  build|start|daemon|exec|logs|health|status|stop|rm|restart|watch|cleanup|persist)
+  build|start|daemon|exec|logs|health|status|stop|rm|restart|watch|cleanup|persist|debug)
     "$@"
     ;;
   *)
