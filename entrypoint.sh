@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+echo "--- DEBUG: Checking environment variables ---"
+echo "REMOTE_MCP_HOST='${REMOTE_MCP_HOST}'"
+echo "-------------------------------------------"
+
 echo "=== MCP 3D Environment Starting ==="
 echo "Container IP: $(hostname -I | awk '{print $1}')"
 echo "Available MCP Servers: Blender (9876), Revit (8080), Unreal (55557)"
