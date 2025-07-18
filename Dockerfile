@@ -1,5 +1,13 @@
 ################################################################################
-# Stage 0 – CUDA 12.9 + cuDNN (official NVIDIA image)
+# Enhanced 3D Application MCP Docker Environment
+# Supports: Blender, Unreal Engine, Revit MCP servers with proper networking
+#
+# Key Features:
+# - All MCP servers properly integrated and auto-started
+# - Network configured for host<->container communication
+# - VNC/noVNC for remote GUI access
+# - GPU support with CUDA 12.9
+# - Comprehensive logging and monitoring
 ################################################################################
 FROM nvidia/cuda:12.9.0-cudnn-devel-ubuntu24.04 AS base
 
@@ -8,175 +16,237 @@ FROM nvidia/cuda:12.9.0-cudnn-devel-ubuntu24.04 AS base
 ################################################################################
 ARG DEBIAN_FRONTEND=noninteractive
 
-# 1. Set Environment Variables for Blender
-# Set the Blender version and create a directory for it.
+# 1. Set Environment Variables
 ARG BLENDER_DOWNLOAD_URL
 ENV BLENDER_VERSION="4.5"
 ENV BLENDER_PATH="/usr/local/blender"
-
-# Set the application workspace directory
 ENV APP_HOME="/app"
+ENV PATH="/root/.cargo/bin:/opt/venv312/bin:/root/.local/bin:${PATH}"
+ENV RUSTFLAGS="-C target-cpu=skylake-avx512 -C target-feature=+avx2,+avx512f,+avx512bw,+avx512dq"
+ENV WASMEDGE_PLUGIN_PATH="/usr/local/lib/wasmedge"
+ENV PYTHONPATH="${APP_HOME}:/workspace"
+
+# VNC and Display settings for remote GUI access
+ENV DISPLAY=:99
+ENV VNC_PORT=5900
+ENV NO_VNC_PORT=6080
+ENV VNC_COL_DEPTH=24
+ENV VNC_RESOLUTION=1920x1080
+
+# MCP Server configuration
+ENV MCP_LOG_LEVEL=debug
+ENV BLENDER_MCP_HOST=0.0.0.0
+ENV BLENDER_MCP_PORT=9876
+ENV REVIT_MCP_PORT=8080
+ENV UNREAL_MCP_PORT=55557
+
 WORKDIR $APP_HOME
 
-# 2. Install Dependencies
-# Add any dependencies needed to run Blender and its Python environment.
-# wget and other utilities are for downloading and extracting Blender.
+# 2. Install All System Dependencies in a Single Layer
+# This includes setting up repositories for Docker, Deadsnakes, Node.js, and OpenVINO,
+# then installing all packages, and finally cleaning up.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    ca-certificates curl gnupg software-properties-common
-# Add Docker's official GPG key
-RUN install -m 0755 -d /etc/apt/keyrings && \
+    apt-get install -y --no-install-recommends ca-certificates curl gnupg software-properties-common wget && \
+    # Add Docker's official GPG key
+    install -m 0755 -d /etc/apt/keyrings && \
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
-    chmod a+r /etc/apt/keyrings/docker.gpg
-# Set up the repository
-RUN echo \
-      "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-      "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
-      tee /etc/apt/sources.list.d/docker.list > /dev/null
-# Add Deadsnakes PPA for newer Python versions
-RUN add-apt-repository -y ppa:deadsnakes/ppa
-# Add NodeSource repository for up-to-date NodeJS (v22+)
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-# Install all packages
-RUN apt-get update && \
+    chmod a+r /etc/apt/keyrings/docker.gpg && \
+    # Set up the Docker repository
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
+    # Add Deadsnakes PPA for newer Python versions
+    add-apt-repository -y ppa:deadsnakes/ppa && \
+    # Add NodeSource repository for up-to-date NodeJS (v22+)
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    # Add Intel's GPG key for OpenVINO
+    wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | gpg --dearmor --output /etc/apt/trusted.gpg.d/intel.gpg && \
+    echo "deb https://apt.repos.intel.com/openvino ubuntu24 main" > /etc/apt/sources.list.d/intel-openvino.list && \
+    # Update apt lists again after adding new repos
+    apt-get update && \
+    # Install all packages
     apt-get install -y --no-install-recommends \
-      wget libxi6 libxxf86vm1 libxfixes3 libxrender1 \
+      # Build tools and utilities
       build-essential clang git pkg-config libssl-dev \
       lsb-release shellcheck hyperfine openssh-client tmux sudo \
-      docker-ce docker-ce-cli containerd.io unzip 7zip texlive-full latexmk chktex \
-      # Additional Blender dependencies for headless operation
+      unzip 7zip texlive-full latexmk chktex \
+      # Docker
+      docker-ce docker-ce-cli containerd.io \
+      # Blender dependencies
+      libxi6 libxxf86vm1 libxfixes3 libxrender1 \
       libgl1 libglu1-mesa libglib2.0-0 libsm6 libxext6 \
       libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 \
-      # X11 virtual framebuffer for headless rendering
       xvfb \
-      # Python, Node, and GPU/Wasm dependencies
+      # VNC and Remote Display for GUI access
+      x11vnc xvfb fluxbox novnc websockify supervisor \
+      # Network debugging tools for MCP troubleshooting
+      netcat-openbsd net-tools iputils-ping dnsutils tcpdump \
+      # Additional 3D application dependencies
+      libglfw3 libglew2.2 libassimp5 libfreetype6 \
+      ffmpeg imagemagick potrace \
+      # Python versions
       python3.12 python3.12-venv python3.12-dev \
       python3.13 python3.13-venv python3.13-dev \
+      # Node.js
       nodejs \
-      libvulkan1 vulkan-tools ocl-icd-libopencl1 && \
+      # GPU/Wasm dependencies
+      libvulkan1 vulkan-tools ocl-icd-libopencl1 \
+      # OpenVINO
+      openvino-2025.2.0 && \
+    # Clean up apt cache
     rm -rf /var/lib/apt/lists/* && \
-    # Linters
+    # Install hadolint
     wget -O /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 && \
     chmod +x /usr/local/bin/hadolint
 
 # 3. Install Blender
-# Download and extract the specified Blender LTS version.
-# Use default URL if not provided
 RUN BLENDER_URL=${BLENDER_DOWNLOAD_URL:-"https://mirror.clarkson.edu/blender/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz"} && \
     wget "${BLENDER_URL}" -O blender.tar.xz && \
     tar -xf blender.tar.xz && \
     mv blender-${BLENDER_VERSION}.0-linux-x64 ${BLENDER_PATH} && \
     rm blender.tar.xz
 
-# 4. Create addon directory and copy files later
-# We'll copy the addon files after creating the proper directory structure
-RUN mkdir -p ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/blender_mcp_server
+# 4. Install Blender Python Dependencies & Create Addon Directory
+RUN mkdir -p ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/blender_mcp_server && \
+    ${BLENDER_PATH}/${BLENDER_VERSION}/python/bin/python3.11 -m ensurepip && \
+    ${BLENDER_PATH}/${BLENDER_VERSION}/python/bin/python3.11 -m pip install --upgrade pip && \
+    ${BLENDER_PATH}/${BLENDER_VERSION}/python/bin/python3.11 -m pip install Pillow
 
-# 5. Install the MCP Server Package Dependencies
-# Install dependencies for the addon using Blender's Python
-RUN /usr/local/blender/4.5/python/bin/python3.11 -m ensurepip && \
-    /usr/local/blender/4.5/python/bin/python3.11 -m pip install --upgrade pip && \
-    /usr/local/blender/4.5/python/bin/python3.11 -m pip install Pillow
+# 5. Install Rust Toolchain and Tools
+# Using cargo-binstall for faster, pre-compiled binaries
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile default && \
+    . "$HOME/.cargo/env" && \
+    cargo install cargo-binstall && \
+    cargo binstall -y cargo-edit
 
-# 6. Set PYTHONPATH for Blender integration
-ENV PYTHONPATH="${APP_HOME}"
+# 6. Install uv and uvx (fast python package managers)
+# uvx is required for running blender-mcp as a tool
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 7. Copy startup and addon files
-# Note: These files will be copied from the build context
-COPY addon.py ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/blender_mcp_server/__init__.py
-COPY keep_alive.py $APP_HOME/
-COPY entrypoint.sh /
-COPY entrypoint.sh /
-RUN chmod +x /entrypoint.sh
+# 7. Install WasmEdge
+RUN curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install.sh | \
+    bash -s -- -p /usr/local --plugins wasi_nn-openvino && ldconfig
 
-# ---------- Create Python virtual environments & install global node packages ----------
+# 8. Create Python Virtual Environments
 RUN python3.12 -m venv /opt/venv312 && \
     /opt/venv312/bin/pip install --upgrade pip wheel setuptools && \
     python3.13 -m venv /opt/venv313 && \
     /opt/venv313/bin/pip install --upgrade pip wheel setuptools
 
-# ---------- Install global CLI tools with claude-flow@alpha as primary ----------
-RUN npm install -g claude-flow@alpha ruv-swarm @anthropic-ai/claude-code @google/gemini-cli @openai/codex
+# 9. Install Global NPM Packages
+RUN npm install -g \
+    claude-flow@alpha \
+    ruv-swarm \
+    @anthropic-ai/claude-code \
+    @google/gemini-cli \
+    @openai/codex \
+    vite \
+    typescript \
+    eslint \
+    prettier \
+    jest \
+    storybook
 
-# ---------- Install Python ML & AI libraries into the 3.12 venv ----------
+# 10. Install Python ML & AI libraries + MCP dependencies
 # Copy requirements file and install dependencies to leverage Docker layer caching.
 COPY requirements.txt .
-RUN /opt/venv312/bin/pip install --no-cache-dir --retries 10 --timeout 60 --index-url https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn -r requirements.txt
+RUN /opt/venv312/bin/pip install --no-cache-dir -r requirements.txt && \
+    # Install Modular MAX runtime separately
+    /opt/venv312/bin/pip install --no-cache-dir --pre modular && \
+    # Install voice command dependencies (Whisper, FastAPI, WebSockets)
+    /opt/venv312/bin/pip install --no-cache-dir openai-whisper fastapi uvicorn websockets soundfile python-multipart && \
+    # Install MCP-specific Python packages
+    /opt/venv312/bin/pip install --no-cache-dir blender-mcp fastmcp mcp
 
-# Install the Modular MAX runtime last. As a pre-release, it's best
-# installed on its own to avoid influencing the resolution of stable packages.
-RUN /opt/venv312/bin/pip install --no-cache-dir --retries 10 --timeout 60 --index-url https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn --pre modular
+# 11. Clone and Setup MCP Server Repositories
+# Each MCP server is properly built and configured for immediate use
+RUN git clone https://github.com/revit-mcp/revit-mcp.git /app/revit-mcp && \
+    cd /app/revit-mcp && npm install && npm run build && cd /app && \
+    git clone https://github.com/ahujasid/blender-mcp.git /app/blender-mcp-source && \
+    cd /app/blender-mcp-source && /opt/venv312/bin/pip install -e . && cd /app && \
+    git clone https://github.com/chongdashu/unreal-mcp.git /app/unreal-mcp-source && \
+    cd /app/unreal-mcp-source/Python && \
+    [ -f requirements.txt ] && /opt/venv312/bin/pip install -r requirements.txt || true && \
+    cd /app
 
-# ---------- Rust tool-chain (AVX‑512) ----------
-ENV PATH="/root/.cargo/bin:${PATH}"
-# Update certificates and install Rust with retry logic
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates && \
-    update-ca-certificates && \
-    for i in 1 2 3; do \
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile default && break || \
-        echo "Rust installation attempt $i failed, retrying..." && sleep 5; \
-    done && \
-    echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> /etc/profile.d/rust.sh && \
-    . "$HOME/.cargo/env" && \
-    cargo install cargo-edit
-ENV RUSTFLAGS="-C target-cpu=skylake-avx512 -C target-feature=+avx2,+avx512f,+avx512bw,+avx512dq"
+# Create directories for MCP configuration, logs, and voice UI
+RUN mkdir -p /app/mcp-configs /app/mcp-logs /app/mcp-scripts /app/voice-ui
 
-# ---------- Install uv (fast python package manager) ----------
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# ---------- GPU‑accelerated Wasm stack (WasmEdge) ----------
-RUN curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install.sh | \
-    bash -s -- -p /usr/local --plugins wasi_nn-openvino && ldconfig
-
-# ---------- OpenVINO from official APT repository ----------
-RUN wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | \
-    gpg --dearmor --output /etc/apt/trusted.gpg.d/intel.gpg && \
-    echo "deb https://apt.repos.intel.com/openvino ubuntu24 main" > /etc/apt/sources.list.d/intel-openvino.list && \
-    apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openvino-2025.2.0
+# 12. Copy application files and MCP configurations
+COPY addon.py ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/blender_mcp_server/__init__.py
+COPY keep_alive.py $APP_HOME/
+COPY entrypoint.sh /
+COPY supervisord.conf /etc/supervisor/conf.d/
+COPY healthcheck.sh /app/mcp-scripts/
+RUN chmod +x /entrypoint.sh && \
+    [ -f /app/mcp-scripts/healthcheck.sh ] && chmod +x /app/mcp-scripts/healthcheck.sh || true
 
 ################################################################################
 # Stage 2 – Non‑root user, health‑check, env placeholders
 ################################################################################
 ARG UID=1000
 ARG GID=1000
-# Remove the existing ubuntu user and replace it with the dev user
-# This ensures there's no UID conflict and the dev user is properly used
+
+# 13. Create non-root user and set permissions
 RUN (id ubuntu &>/dev/null && userdel -r ubuntu) || true && \
     groupadd -g ${GID} dev && \
     useradd -m -s /bin/bash -u ${UID} -g ${GID} dev && \
-    # Add dev user to the docker and sudo groups
     usermod -aG docker,sudo dev && \
-    # Allow passwordless sudo for the dev user
     echo "dev ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev && chmod 0440 /etc/sudoers.d/dev && \
-    # Fix ownership of npm global modules so dev user can write to them
     chown -R dev:dev /usr/lib/node_modules && \
-    # Create python symlink for convenience
     ln -s /usr/bin/python3.12 /usr/local/bin/python && \
-    # Create workspace directories with proper ownership
-    mkdir -p /workspace /workspace/ext /workspace/logs && \
-    chown -R dev:dev /workspace
-
+    mkdir -p /workspace /workspace/ext /workspace/logs /workspace/.vnc && \
+    chown -R dev:dev /workspace $APP_HOME && \
+    # Setup VNC password (default: mcpserver) - can be overridden via env
+    mkdir -p /home/dev/.vnc && \
+    x11vnc -storepasswd ${VNC_PASSWORD:-mcpserver} /home/dev/.vnc/passwd && \
+    chown -R dev:dev /home/dev/.vnc && \
+    # Ensure uvx is available in PATH for all users
+    ln -s /root/.cargo/bin/uvx /usr/local/bin/uvx 2>/dev/null || true
 
 USER dev
 WORKDIR /workspace
+
+# 14. Copy documentation and configure git for the dev user
 COPY README.md .
 COPY CLAUDE-README.md .
+RUN git config --global user.email "mcp@3d-docker.local" && \
+    git config --global user.name "MCP 3D Agent" && \
+    # Configure Claude Code MCP settings directory
+    mkdir -p /home/dev/.claude && \
+    echo '{"mcpServers": {}}' > /home/dev/.claude/settings.json && \
+    chown -R dev:dev /home/dev/.claude
 
-# Configure git for the dev user
-RUN git config --global user.email "swarm@dreamlab-ai.com" && \
-    git config --global user.name "Swarm Agent"
+# 15. Final setup and port exposure
+# MCP Server Ports - accessible from host machine
+# Blender MCP TCP server
+EXPOSE 9876
+# Revit MCP server
+EXPOSE 8080
+# Unreal MCP TCP server
+EXPOSE 55557
 
-# Activate 3.12 venv by default
-ENV PATH="/opt/venv312/bin:${PATH}"
+# UI/Service Ports
+# Claude Flow UI
+EXPOSE 3000
+# Additional services
+EXPOSE 3001
 
-# Runtime placeholders
-ENV WASMEDGE_PLUGIN_PATH="/usr/local/lib/wasmedge"
+# Remote Access Ports
+# VNC for remote desktop
+EXPOSE 5900
+# noVNC for web-based access
+EXPOSE 6080
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-  CMD ["sh", "-c", "command -v max >/dev/null"] || exit 1
+# Development Ports
+# Development server
+EXPOSE 8000
+# Voice command server
+EXPOSE 8001
+# Jupyter notebook
+EXPOSE 8888
 
-# Start via entrypoint.sh which handles all services including Blender MCP
+# Health check to ensure MCP servers are responsive
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD ["/bin/bash", "-c", "nc -z localhost 9876 || nc -z localhost 8080 || nc -z localhost 55557 || exit 1"]
+
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["--interactive"]

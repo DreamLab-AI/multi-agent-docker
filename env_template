@@ -23,3 +23,6 @@ DOCKER_MEMORY=
 
 # blender download link
 BLENDER_DOWNLOAD_URL="https://cdn.builder.blender.org/download/daily/blender-5.0.0-alpha+main.1a247fbaa8bc-linux.x86_64-release.tar.xz"
+
+# Remote MCP Server IP
+REMOTE_MCP_HOST=

@@ -1,0 +1,38 @@
+{
+  "mcpServers": {
+    "blender": {
+      "command": "uvx",
+      "args": ["blender-mcp"],
+      "env": {
+        "BLENDER_HOST": "host.docker.internal",
+        "BLENDER_PORT": "9876"
+      }
+    },
+    "blender-tcp": {
+      "_comment": "Alternative TCP connection for Blender (if uvx doesn't work)",
+      "transport": "tcp",
+      "host": "host.docker.internal",
+      "port": 9876
+    },
+    "revit": {
+      "command": "node",
+      "args": ["/workspace/revit-mcp/build/index.js"],
+      "env": {
+        "REVIT_SOCKET_PORT": "8080"
+      }
+    },
+    "unreal": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/workspace/unreal-mcp-source/Python",
+        "run",
+        "unreal_mcp_server.py"
+      ],
+      "env": {
+        "UNREAL_HOST": "host.docker.internal",
+        "UNREAL_PORT": "55557"
+      }
+    }
+  }
+}

@@ -26,7 +26,9 @@ bl_info = {
 }
 
 class BlenderMCPServer:
-    def __init__(self, host='localhost', port=9876, max_workers=5):
+    def __init__(self, host=None, port=9876, max_workers=5):
+        if host is None:
+            host = os.environ.get('BLENDER_MCP_HOST', 'localhost')
         self.host = host
         self.port = port
         self.server_socket = None
