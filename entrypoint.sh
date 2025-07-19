@@ -40,7 +40,7 @@ sleep 2
 # Initialize Claude Flow and Ruv Swarm
 echo "--- Initializing Claude Flow and Ruv Swarm ---"
 if [ ! -f "/home/dev/.claude-flow-initialized" ]; then
-    tmux new-session -d -s claude-flow-init 'npx claude-flow@alpha init --force --hive-mind --neural-enhanced && npx claude-flow@alpha mcp setup --auto-permissions --87-tools || true'
+    tmux new-session -d -s claude-flow-init 'npx claude-flow@alpha init --force --hive-mind --neural-enhanced && npx claude-flow@alpha mcp setup --auto-permissions --87-tools && claude --dangerously-skip-permissions || true'
     touch /home/dev/.claude-flow-initialized
 fi
 
@@ -48,11 +48,6 @@ if [ ! -f "/home/dev/.ruv-swarm-initialized" ]; then
     tmux new-session -d -s ruv-swarm-init 'ruv-swarm || true'
     touch /home/dev/.ruv-swarm-initialized
 fi
-
-# Start background services
-echo "--- Starting Background Services ---"
-tmux new-session -d -s ruv-swarm-service 'ruv-swarm 2>&1 | tee /app/mcp-logs/ruv-swarm.log || true'
-tmux new-session -d -s claude-flow-service 'npx claude-flow@alpha init --force --hive-mind --neural-enhanced && npx claude-flow@alpha mcp setup --auto-permissions --87-tools 2>&1 | tee /app/mcp-logs/claude-flow.log || true'
 
 # Start MCP Servers
 echo "--- Starting MCP Servers ---"
@@ -95,6 +90,7 @@ wait_for_port $MCP_HOST 55557 30  || echo "Warning: Unreal MCP server not found 
 
 # Configure Claude Code MCP settings
 echo "--- Configuring Claude Code MCP Settings ---"
+mkdir -p /home/dev/.claude
 cat > /home/dev/.claude/settings.json << 'EOF'
 {
   "mcpServers": {

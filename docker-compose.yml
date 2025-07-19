@@ -32,6 +32,7 @@ services:
       - ./workspace:/workspace
       - ./blender-files:/blender-files
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ${EXTERNAL_DIR:-./.agent-mount/ext}:/workspace/ext
 
     # Run in interactive mode by default
     command: ["--interactive"]

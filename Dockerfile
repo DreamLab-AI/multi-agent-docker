@@ -45,8 +45,8 @@ RUN apt-get update && \
       # Additional Blender dependencies for headless operation (COMMENTED OUT)
       # libgl1 libglu1-mesa libglib2.0-0 libsm6 libxext6 \
       # libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 \
-      # X11 virtual framebuffer for headless rendering (COMMENTED OUT)
-      # xvfb \
+      # X11 virtual framebuffer for headless rendering
+      xvfb \
       # Python, Node, and GPU/Wasm dependencies
       python3.12 python3.12-venv python3.12-dev \
       python3.13 python3.13-venv python3.13-dev \
