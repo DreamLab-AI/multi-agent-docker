@@ -12,7 +12,7 @@ wait_for_port() {
     local port=$2
     local timeout=${3:-30}
     local elapsed=0
-    
+
     echo "Waiting for $host:$port to be available..."
     while ! nc -z "$host" "$port" 2>/dev/null; do
         if [ $elapsed -ge $timeout ]; then
@@ -36,7 +36,7 @@ sleep 2
 if [ "${ENABLE_VNC:-true}" = "true" ]; then
     echo "--- Starting VNC Server ---"
     x11vnc -display :99 -forever -usepw -shared -rfbport 5900 -bg -o /app/mcp-logs/vnc.log
-    
+
     # Start noVNC
     echo "--- Starting noVNC Web Interface ---"
     websockify -D --web=/usr/share/novnc/ --cert=/home/dev/.vnc/novnc.pem 6080 localhost:5900
@@ -63,16 +63,16 @@ SUPERVISOR_PID=$!
 sleep 5
 
 # Start Blender with MCP addon
-echo "--- Starting Blender with MCP Server ---"
-tmux new-session -d -s blender-mcp "
-    ${BLENDER_PATH}/blender \
-        --background \
-        --python /app/keep_alive.py \
-        -- \
-        --blendermcp-autostart \
-        --blendermcp-port 9876 \
-        --blendermcp-host 0.0.0.0
-"
+# echo "--- Starting Blender with MCP Server ---"
+# tmux new-session -d -s blender-mcp "
+#     ${BLENDER_PATH}/blender \
+#         --background \
+#         --python /app/keep_alive.py \
+#         -- \
+#         --blendermcp-autostart \
+#         --blendermcp-port 9876 \
+#         --blendermcp-host 0.0.0.0
+# "
 
 # Start Revit MCP Server
 echo "--- Starting Revit MCP Server ---"
@@ -90,9 +90,10 @@ tmux new-session -d -s unreal-mcp "
 
 # Wait for all servers to be ready
 echo "--- Waiting for MCP Servers to be ready ---"
-wait_for_port localhost 9876 60   # Blender
-wait_for_port localhost 8080 30   # Revit
-wait_for_port localhost 55557 30  # Unreal
+MCP_HOST=${REMOTE_MCP_HOST:-localhost}
+wait_for_port $MCP_HOST 9876 60   || echo "Warning: Blender MCP server not found at $MCP_HOST:9876. Continuing..."
+wait_for_port $MCP_HOST 8080 30   || echo "Warning: Revit MCP server not found at $MCP_HOST:8080. Continuing..."
+wait_for_port $MCP_HOST 55557 30  || echo "Warning: Unreal MCP server not found at $MCP_HOST:55557. Continuing..."
 
 # Configure Claude Code MCP settings
 echo "--- Configuring Claude Code MCP Settings ---"

@@ -10,7 +10,7 @@ services:
         - BLENDER_DOWNLOAD_URL=https://mirror.clarkson.edu/blender/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz
     image: blender-mcp-dev:latest
     container_name: blender-mcp-container
-    
+
     # GPU support - enabled by default, will gracefully fail if no GPU
     deploy:
       resources:
@@ -19,91 +19,90 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    
+
     environment:
       # Display settings for GUI applications
       - DISPLAY=:99
       - VNC_RESOLUTION=1920x1080
       - VNC_COL_DEPTH=24
       - VNC_PASSWORD=mcpserver  # Change this for production
-      
+
       # GPU settings
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all
-      
+
       # MCP server configuration - servers bind to 0.0.0.0 for external access
       - MCP_LOG_LEVEL=debug
       - BLENDER_MCP_HOST=0.0.0.0
       - BLENDER_MCP_PORT=9876
       - REVIT_MCP_PORT=8080
       - UNREAL_MCP_PORT=55557
-      
+
       # Python settings
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app:/workspace
-      
+
       # Network settings for host communication
       # Docker Desktop uses host.docker.internal
       # Linux may need to use host-gateway or bridge IP
       - HOST_GATEWAY=host.docker.internal
-      
+
     ports:
       # MCP Server Ports - these are the main ports for accessing MCP servers from host
       - "9876:9876"    # Blender MCP TCP server - connect via localhost:9876
       - "8080:8080"    # Revit MCP server - connect via localhost:8080
       - "55557:55557"  # Unreal MCP TCP server - connect via localhost:55557
-      
-      # UI/Service Ports  
+
+      # UI/Service Ports
       - "3000:3000"    # Claude Flow UI
       - "3001:3001"    # Additional services
-      
+
       # Remote Access Ports (optional - comment out if not needed)
       - "5900:5900"    # VNC for remote desktop access
       - "6080:6080"    # noVNC for web-based VNC access
-      
+
       # Development Ports (optional)
       - "8000:8000"    # Development server
-      - "8001:8001"    # Voice command server
       - "8888:8888"    # Jupyter notebook
-      
+
     volumes:
       # Main workspace volume
       - ./workspace:/workspace
       - ./blender-files:/blender-files
-      
+
       # X11 socket for GUI applications (Linux only, comment out on Mac/Windows)
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      
+
       # Docker socket for container management (optional, adds security risk)
       # - /var/run/docker.sock:/var/run/docker.sock
-      
+
       # MCP configuration and logs persistence
       - ./mcp-configs:/app/mcp-configs
       - ./mcp-logs:/app/mcp-logs
-      
+
       # Persist VNC settings
       - vnc-data:/home/dev/.vnc
-      
-      # Persist Claude settings  
+
+      # Persist Claude settings
       - claude-settings:/home/dev/.claude
-      
+
     # Run in interactive mode by default
     command: ["--interactive"]
-    
+
     # Keep stdin open and allocate a pseudo-TTY
     stdin_open: true
     tty: true
-    
+
     # Network configuration - ensures proper host communication
     networks:
       mcp-net:
         ipv4_address: 172.20.0.10  # Static IP for consistent access
-    
+
     # Extra hosts for better host system communication
     extra_hosts:
       - "host.docker.internal:host-gateway"  # Works on Docker Desktop
       - "mcp-host:host-gateway"              # Alternative hostname
-    
+
     # Security options
     security_opt:
       - seccomp:unconfined
@@ -111,12 +110,12 @@ services:
     cap_add:
       - SYS_PTRACE
       - NET_ADMIN  # For network debugging tools
-      
+
     # Resource limits - adjust based on your system
     mem_limit: 16g      # Increase for 3D applications
     cpus: "8.0"         # Use more CPUs if available
     shm_size: '2gb'     # Shared memory for GPU operations
-    
+
     # Healthcheck - verifies MCP servers are accessible
     healthcheck:
       test: ["CMD", "/bin/bash", "-c", "nc -z localhost 9876 || nc -z localhost 8080 || nc -z localhost 55557"]
@@ -124,12 +123,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-      
+
     # Restart policy
     restart: unless-stopped
-    
-    networks:
-      - mcp-net
 
   # Optional: Claude Flow standalone service
   # Enable with: docker-compose --profile standalone up

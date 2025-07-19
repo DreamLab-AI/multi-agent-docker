@@ -151,8 +151,6 @@ COPY requirements.txt .
 RUN /opt/venv312/bin/pip install --no-cache-dir -r requirements.txt && \
     # Install Modular MAX runtime separately
     /opt/venv312/bin/pip install --no-cache-dir --pre modular && \
-    # Install voice command dependencies (Whisper, FastAPI, WebSockets)
-    /opt/venv312/bin/pip install --no-cache-dir openai-whisper fastapi uvicorn websockets soundfile python-multipart && \
     # Install MCP-specific Python packages
     /opt/venv312/bin/pip install --no-cache-dir blender-mcp fastmcp mcp
 
@@ -167,8 +165,8 @@ RUN git clone https://github.com/revit-mcp/revit-mcp.git /app/revit-mcp && \
     [ -f requirements.txt ] && /opt/venv312/bin/pip install -r requirements.txt || true && \
     cd /app
 
-# Create directories for MCP configuration, logs, and voice UI
-RUN mkdir -p /app/mcp-configs /app/mcp-logs /app/mcp-scripts /app/voice-ui
+# Create directories for MCP configuration and logs
+RUN mkdir -p /app/mcp-configs /app/mcp-logs /app/mcp-scripts
 
 # 12. Copy application files and MCP configurations
 COPY addon.py ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/blender_mcp_server/__init__.py
@@ -239,8 +237,6 @@ EXPOSE 6080
 # Development Ports
 # Development server
 EXPOSE 8000
-# Voice command server
-EXPOSE 8001
 # Jupyter notebook
 EXPOSE 8888
 

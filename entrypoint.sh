@@ -64,17 +64,17 @@ fi
 echo "--- Starting MCP Servers ---"
 
 # Start Blender MCP Server with proper network binding
-echo "Starting Blender MCP Server on port 9876..."
-tmux new-session -d -s blender-mcp "
-    ${BLENDER_PATH}/blender \
-        --background \
-        --python /app/keep_alive.py \
-        -- \
-        --blendermcp-autostart \
-        --blendermcp-port 9876 \
-        --blendermcp-host 0.0.0.0 \
-        2>&1 | tee /app/mcp-logs/blender-mcp.log
-"
+# echo "Starting Blender MCP Server on port 9876..."
+# tmux new-session -d -s blender-mcp "
+#     ${BLENDER_PATH}/blender \
+#         --background \
+#         --python /app/keep_alive.py \
+#         -- \
+#         --blendermcp-autostart \
+#         --blendermcp-port 9876 \
+#         --blendermcp-host 0.0.0.0 \
+#         2>&1 | tee /app/mcp-logs/blender-mcp.log
+# "
 
 # Start Revit MCP Server
 echo "Starting Revit MCP Server on port 8080..."
@@ -95,10 +95,9 @@ tmux new-session -d -s unreal-mcp "
 # Wait for all MCP servers to be ready
 echo "--- Waiting for MCP Servers to be ready ---"
 MCP_HOST=${REMOTE_MCP_HOST:-localhost}
-wait_for_port $MCP_HOST 9876 60   || echo "Warning: Blender MCP server not found at $MCP_HOST:9876"
-wait_for_port $MCP_HOST 8080 30   || echo "Warning: Revit MCP server not found at $MCP_HOST:8080"
-wait_for_port $MCP_HOST 55557 30  || echo "Warning: Unreal MCP server not found at $MCP_HOST:55557"
-wait_for_port localhost 8001 30   # Voice Command Server
+wait_for_port $MCP_HOST 9876 60   || echo "Warning: Blender MCP server not found at $MCP_HOST:9876. Continuing..."
+wait_for_port $MCP_HOST 8080 30   || echo "Warning: Revit MCP server not found at $MCP_HOST:8080. Continuing..."
+wait_for_port $MCP_HOST 55557 30  || echo "Warning: Unreal MCP server not found at $MCP_HOST:55557. Continuing..."
 
 # Configure Claude Code MCP settings
 echo "--- Configuring Claude Code MCP Settings ---"
@@ -154,25 +153,6 @@ EOF
 
 echo "--- Blender MCP process started in the background ---"
 
-# Copy voice UI files if they exist
-if [ -f /workspace/ext/voice-ui/index.html ]; then
-    echo "--- Setting up Voice Command UI ---"
-    cp -r /workspace/ext/voice-ui/* /app/voice-ui/ 2>/dev/null || true
-fi
-
-# Start Voice Command Server
-echo "--- Starting Voice Command Server ---"
-if [ -f /workspace/ext/voice-command-server.py ]; then
-    cp /workspace/ext/voice-command-server.py /app/
-    tmux new-session -d -s voice-server "
-        cd /app && \
-        /opt/venv312/bin/python voice-command-server.py \
-        2>&1 | tee /app/mcp-logs/voice-server.log
-    "
-    echo "Voice Command Server starting on port 8001..."
-else
-    echo "Voice Command Server script not found, skipping..."
-fi
 
 # Create helpful aliases for MCP management
 cat >> /home/dev/.bashrc << 'EOF'
@@ -189,7 +169,6 @@ alias mcp-test-all='echo "Testing all MCP servers..."; mcp-test-blender; mcp-tes
 alias blender-log='tmux attach-session -t blender-mcp'
 alias revit-log='tmux attach-session -t revit-mcp'
 alias unreal-log='tmux attach-session -t unreal-mcp'
-alias voice-log='tmux attach-session -t voice-server'
 
 # VNC information
 alias vnc-info='echo "VNC Access:"; echo "  - Direct VNC: vnc://localhost:5900 (password: ${VNC_PASSWORD:-mcpserver})"; echo "  - Web VNC: http://localhost:6080"'
@@ -220,7 +199,6 @@ echo "MCP Servers (accessible from host):"
 echo "  - Blender MCP: localhost:9876"
 echo "  - Revit MCP: localhost:8080"
 echo "  - Unreal MCP: localhost:55557"
-echo "  - Voice Commander: http://localhost:8001"
 echo ""
 
 if [ "${ENABLE_VNC:-true}" = "true" ]; then
