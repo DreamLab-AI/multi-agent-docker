@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# powerdev.sh  –  helper for the claude-flow@alpha powered development container
+# powerdev-enhanced.sh - helper for the enhanced MCP orchestration development environment
 set -euo pipefail
 
+# Configuration
+COMPOSE_FILE=docker-compose.yml
+PROJECT_NAME=powerdev
+ENVFILE=.env
 IMAGE=powerdev:latest
-NAME=powerdev
-ENVFILE=.env     # ← update to match your actual env file
 
 # Source the .env file to make variables available to the script
 if [[ -f "${ENVFILE}" ]]; then
@@ -31,49 +33,6 @@ detect_resources() {
   fi
 }
 
-# ---- Runtime options setup (called after resource detection) ---------------------
-setup_run_opts() {
-  RUN_OPTS=(
-    --gpus all
-    --cpus "${DOCKER_CPUS}"
-    --memory "${DOCKER_MEMORY}"
-    # Balanced security: allow package installation but limit host access
-    --security-opt apparmor:unconfined  # Allow package installation
-    --security-opt seccomp:unconfined   # Allow system calls needed for development
-    --cap-add SYS_ADMIN                 # Required for Docker-in-Docker
-    --cap-add SYS_PTRACE                # Required for debugging
-    --cap-drop ALL                      # Drop all capabilities first
-    --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --cap-add FSETID --cap-add KILL --cap-add SETGID --cap-add SETUID --cap-add NET_BIND_SERVICE --cap-add NET_RAW --cap-add SYS_CHROOT --cap-add MKNOD --cap-add AUDIT_WRITE --cap-add SETFCAP
-    --pids-limit 4096
-    -u dev
-    --env-file "${ENVFILE}"
-    # Mount with proper permissions - all writable by dev user
-    -v "${EXTERNAL_DIR:-./.agent-mount/ext}:/workspace/ext:rw"
-    -v "./.agent-mount/docker_data:/home/dev/data:rw"
-    -v "./.agent-mount/docker_workspace:/home/dev/workspace:rw"
-    -v "./.agent-mount/docker_analysis:/home/dev/analysis:rw"
-    -v "./.agent-mount/docker_logs:/home/dev/logs:rw"
-    -v "./.agent-mount/docker_output:/home/dev/output:rw"
-    -v "./.agent-mount/docker_latex:/home/dev/latex:rw"
-    # SSH access (read-only for security)
-    -v "${HOME}/.ssh:/home/dev/.ssh:ro"
-    -v "${SSH_AUTH_SOCK:-/tmp/ssh-agent.sock}:/tmp/ssh-agent.sock:rw"
-    -e SSH_AUTH_SOCK=/tmp/ssh-agent.sock
-    --network docker_ragflow
-    # Docker socket for DinD with group access control
-    -v /var/run/docker.sock:/var/run/docker.sock:rw
-    --privileged # Required for Docker-in-Docker but constrained by caps
-    # Claude Flow web interface
-    -p 3000:3000
-    # Allow container to connect to host services
-    --add-host=host.docker.internal:host-gateway
-    # Environment variables for claude-flow
-    -e CLAUDE_FLOW_PORT=3000
-    -e CLAUDE_FLOW_HOST=0.0.0.0
-    -e CLAUDE_FLOW_DATA_DIR=/home/dev/data/claude-flow
-  )
-}
-
 # ---- Pre-flight checks ---------------------
 preflight() {
   # Check Docker daemon
@@ -82,18 +41,21 @@ preflight() {
     exit 1
   fi
 
-  # Check NVIDIA Docker runtime (removed as it was causing false positives; --gpus all is used in run_opts)
-  # if ! docker run --rm --gpus all nvidia/cuda:12.9.0-base-ubuntu24.04 nvidia-smi >/dev/null 2>&1; then
-  #   echo "Warning: NVIDIA Docker runtime not available or no GPU detected"
-  # fi
+  # Check docker-compose
+  if ! command -v docker-compose >/dev/null 2>&1; then
+    echo "Error: docker-compose not found. Please install docker-compose"
+    exit 1
+  fi
 
   # Ensure required directories exist with proper permissions
   mkdir -p "./.agent-mount/docker_data" "./.agent-mount/docker_workspace"
   mkdir -p "./.agent-mount/docker_analysis" "./.agent-mount/docker_logs" "./.agent-mount/docker_output" "./.agent-mount/docker_latex"
-  mkdir -p "./.agent-mount/docker_data/claude-flow"  # Claude Flow data directory
+  mkdir -p "./.agent-mount/docker_data/claude-flow"
+  mkdir -p "./workspace" "./blender-files" "./mcp-configs" "./mcp-logs"
+  mkdir -p "./orchestrator" "./mcp-scripts" "./mcp-tools" "./grafana"
 
-  # Create EXTERNAL_DIR if set, otherwise create the default ./.agent-mount/ext
-  if [[ -n "${EXTERNAL_DIR}" ]]; then
+  # Create EXTERNAL_DIR if set
+  if [[ -n "${EXTERNAL_DIR:-}" ]]; then
     mkdir -p "${EXTERNAL_DIR}"
   else
     mkdir -p "./.agent-mount/ext"
@@ -107,24 +69,31 @@ preflight() {
   # Ensure directories are writable
   chmod -R 755 "./.agent-mount/"
 
-  echo "Created persistent directories:"
-  echo "  - ./.agent-mount/docker_data (general data)"
-  echo "  - ./.agent-mount/docker_data/claude-flow (claude-flow data)"
-  echo "  - ./.agent-mount/docker_workspace (workspace files)"
-  echo "  - ./.agent-mount/docker_analysis (analysis outputs)"
-  echo "  - ./.agent-mount/docker_logs (container logs)"
-  echo "  - ./.agent-mount/docker_output (processing outputs)"
-  echo "  - ./.agent-mount/docker_latex (LaTeX projects)"
-  if [[ -n "${EXTERNAL_DIR}" ]]; then
-    echo "  - ${EXTERNAL_DIR} (external files)"
-  else
-    echo "  - ./.agent-mount/ext (external files)"
-  fi
+  echo "Created persistent directories"
 
-  # Create network if it doesn't exist
-  if ! docker network inspect docker_ragflow >/dev/null 2>&1; then
-    echo "Creating docker_ragflow network..."
-    docker network create docker_ragflow
+  # Create .env file if it doesn't exist
+  if [[ ! -f "$ENVFILE" ]]; then
+    echo "Creating default .env file..."
+    cat > "$ENVFILE" <<EOF
+# Resource limits
+DOCKER_CPUS=$DOCKER_CPUS
+DOCKER_MEMORY=$DOCKER_MEMORY
+
+# External directory for mounted files
+EXTERNAL_DIR=./.agent-mount/ext
+
+# MCP Configuration
+REMOTE_MCP_HOST=
+MCP_LOG_LEVEL=debug
+POLL_INTERVAL=5000
+
+# Grafana password
+GRAFANA_PASSWORD=admin
+
+# VNC password
+VNC_PASSWORD=mcpserver
+EOF
+    echo ".env file created with defaults"
   fi
 
   # Validate config
@@ -133,391 +102,330 @@ preflight() {
 
 # ---- Config validation ---------------------
 validate_config() {
+  if [[ ! -f "$COMPOSE_FILE" ]]; then
+    echo "Error: $COMPOSE_FILE not found"
+    exit 1
+  fi
+
   if [[ ! -f "$ENVFILE" ]]; then
     echo "Warning: $ENVFILE not found - using environment variables only"
   fi
-
-  if [[ -z "$EXTERNAL_DIR" ]]; then
-    echo "Warning: EXTERNAL_DIR not set - using default path"
-  fi
 }
 
-
-ensure_claude_md() {
-  if [[ ! -f "CLAUDE-README.md" ]]; then
-    echo "CLAUDE-README.md not found. Creating it..."
-    cat > CLAUDE-README.md <<'CLAUDE_MD_EOF'
-# CLAUDE-README.md — Boot Guide (Claude Code v4 + Claude Flow Alpha)
-
-## 1. CORE DIRECTIVES
-1. **Prod-ready only** – ship runnable code; no TODOs or stubs.
-2. **Token-efficient reasoning** – think silently; output final answer unless asked.
-3. **Edge-case first** – list boundaries → write tests → implement.
-4. **Selective context pull** – fetch only needed paths + line nums in large repos.
-5. **Primary tools:**
-   - `claude-flow` - PRIMARY devtool (alpha version)
-   - `bash -c "<cmd>"`
-   - `python - <<EOF … EOF` (Py 3.12 default)
-   - `ruv-swarm` MCP (supporting agent orchestration)
-6. **No hedging / flattery / chit-chat.**
-
-## 2. ENVIRONMENT SNAPSHOT
-
-| Layer | Key Items |
-|-------|-----------|
-| **HW** | Auto-detected CPU/RAM / NVMe / NVIDIA GPUs |
-| **Python 3.12** | `torch` 2.7+ + CUDA 12.9, `tensorflow`, `keras`, `xgboost`, `wgpu` |
-| **Python 3.13** | Clean sandbox (`pip`, `setuptools`, `wheel`) |
-| **CUDA + cuDNN** | `/usr/local/cuda` ready |
-| **Rust** | `rustup`, `clippy`, `cargo-edit`, `sccache` |
-| **Node 22 LTS** | PRIMARY: `claude-flow@alpha`, supporting: `ruv-swarm` |
-| **Linters** | `shellcheck`, `flake8`, `pylint`, `hadolint` |
-| **LaTeX** | `texlive-full`, `latexmk`, `chktex` |
-| **Extras** | `tmux`, `hyperfine`, `docker`, `WasmEdge`, `OpenVINO`, `Modular MAX` |
-| **Web UI** | Claude-Flow UI → **http://localhost:3000** (PRIMARY INTERFACE) |
-
-### Quick env switches:
-```bash
-source /opt/venv312/bin/activate   # ML env
-source /opt/venv313/bin/activate   # Py 3.13 sandbox
-```
-
-## 3. PRIMARY TOOLS & SYNTAX
-
-### 3.1 Claude-Flow Alpha (PRIMARY)
-```bash
-# Start orchestrator (auto-started in container)
-claude-flow start --daemon --port 3000 --health-check-port 3000
-
-# Agent management
-claude-flow agent spawn researcher --name "Research Bot"
-claude-flow agent spawn implementer --name "Code Bot"
-claude-flow agent list --status active
-
-# Task management
-claude-flow task create implementation "Build REST API with auth"
-claude-flow task create research "Research microservices patterns"
-claude-flow task status <task-id>
-
-# Claude instance spawning (integrated)
-claude-flow claude spawn "implement user auth" --mode backend-only
-claude-flow claude spawn "build dashboard" --research --parallel
-
-# Memory and monitoring
-claude-flow memory query --category research --limit 10
-claude-flow monitor --interval 2
-claude-flow status --detailed
-```
-**Web UI at port 3000 provides full interface for job management**
-
-### 3.2 ruv-swarm MCP (SUPPORTING)
-```javascript
-mcp__ruv-swarm__swarm_init       { topology:"hierarchical", maxAgents:5, enableNeural:true }
-mcp__ruv-swarm__agent_spawn      { type:"coder", model:"tcn-detector", pattern:"convergent" }
-mcp__ruv-swarm__task_orchestrate { task:"Build REST API", strategy:"adaptive" }
-```
-
-### 3.3 LaTeX Environment
-- **Full Distribution**: `texlive-full` is installed.
-- **Build Tool**: Use `latexmk` for easy compilation.
-- **Linter**: Use `chktex` to check for common errors.
-
-Example workflow in `/home/dev/latex`:
-```bash
-# Create a simple document
-echo '\documentclass{article}\begin{document}Hello, LaTeX!\end{document}' > mydoc.tex
-
-# Compile it
-latexmk -pdf mydoc.tex
-
-# Clean up auxiliary files
-latexmk -c
-```
-
-## 4. STRUCTURED OUTPUT CONTRACT
-Return one of:
-- **diff** – patch for `git apply`
-- **bash** – shell commands
-- **text** – plain explanation
-
-Always end with **✅ Done** so orchestrator can detect completion.
-
-## 5. CODING & STYLE STANDARDS
-- **Language picks:** Py 3.12 for ML; Rust for perf; Node 22 for CLIs.
-- **Tests:** `pytest -q`, `cargo test`, edge cases mandatory.
-- **Formatters:** `black`, `ruff`, `rustfmt`, `prettier`.
-- **Docs:** Public APIs need docstrings + one example.
-- **Forbidden:** long apologies, empty sections, unexplained "maybe".
-
-## 6. COMMON WORKFLOWS
-
-| Goal | One-liner |
-|------|-----------|
-| Start Claude-Flow | `claude-flow start --daemon --health-check-port 3000` |
-| Spawn agents | `claude-flow agent spawn implementer --name "Code Bot"` |
-| Create tasks | `claude-flow task create research "AI trends analysis"` |
-| Spawn Claude instance | `claude-flow claude spawn "build API" --mode backend-only` |
-| Monitor system | `claude-flow monitor --interval 2` |
-| Query memory | `claude-flow memory query --category research` |
-
-## 7. TMUX SESSION HINTS
-- **List sessions:** `tmux ls`
-- **Attach to claude-flow:** `tmux attach -t claude-flow`
-- **Attach to mcp:** `tmux attach -t mcp`
-- **New window:** `tmux new-window -t <name>`
-
-## 8. CONTAINER SETUP
-- **Port 3000:** Claude-Flow web UI (primary interface)
-- **Data directory:** `/home/dev/data/claude-flow`
-- **Workspace:** `/workspace` (mounted from host)
-- **External files:** `/workspace/ext` (mounted from host)
-
-## 9. UPDATE RULES
-- Keep file ≤ 350 lines; prune every quarter.
-- Update Environment Snapshot on image changes.
-- Append new claude-flow commands when alpha versions update.
-
----
-
-### Next steps
-1. Access web UI at http://localhost:3000
-2. Use `claude-flow status` to check system health
-3. Spawn agents with `claude-flow agent spawn <type>`
-4. Create tasks with `claude-flow task create <type> "description"`
-
-CLAUDE_MD_EOF
-    echo "CLAUDE-README.md created successfully."
-  fi
-}
-
+# ---- Help message ---------------------
 help() {
   cat <<EOF
-Usage: $0 {build|start|daemon|exec|logs|health|stop|rm|restart|watch|status|cleanup|persist|debug}
+Usage: $0 {build|start|stop|restart|status|logs|shell|health|monitor|tools|cleanup}
 
-  build        Build the Docker image:
-                 $0 build
+Enhanced MCP Orchestration Commands:
 
-  start        Run or start the container with hardened flags (interactive):
-                 $0 start
+  build [--no-cache]   Build all Docker images:
+                       $0 build
+                       $0 build --no-cache
 
-  daemon       Run the container in background mode (detached):
-                 $0 daemon
+  start [profile...]   Start services (with optional profiles):
+                       $0 start                    # Basic services only
+                       $0 start monitoring         # With Grafana monitoring
+                       $0 start tools              # With development tools
+                       $0 start monitoring tools   # Multiple profiles
 
-  exec CMD     Run a command inside the running container:
-                 $0 exec bash
+  stop                 Stop all services:
+                       $0 stop
 
-  logs         Tail container logs:
-                 $0 logs
+  restart [profile...] Restart services:
+                       $0 restart
+                       $0 restart monitoring
 
-  health       Show container health status:
-                 $0 health
+  status               Show service status:
+                       $0 status
 
-  status       Show detailed container status:
-                 $0 status
+  logs [service]       View logs (all services or specific):
+                       $0 logs                     # All services
+                       $0 logs orchestrator        # Specific service
+                       $0 logs -f orchestrator     # Follow logs
 
-  stop         Stop the container:
-                 $0 stop
+  shell [service]      Open shell in service:
+                       $0 shell                    # Main container
+                       $0 shell orchestrator       # Orchestrator container
+                       $0 shell tools              # Tools container
 
-  rm           Remove the container:
-                 $0 rm
+  health               Run comprehensive health checks:
+                       $0 health
 
-  restart      Restart the container:
-                 $0 restart
+  monitor              Open real-time monitoring dashboard:
+                       $0 monitor
 
-  watch        Loop, checking health every 60s and restarting if unhealthy:
-                 $0 watch
+  tools                Run MCP testing tools:
+                       $0 tools ws-test            # Test WebSocket
+                       $0 tools api-test           # Test REST API
 
-  cleanup      Clean up Docker resources (system and volume prune):
-                 $0 cleanup
+  cleanup              Clean up all containers and volumes:
+                       $0 cleanup
 
-  persist      Save analysis outputs to persistent storage:
-                 $0 persist
+Service URLs:
+  - Claude Flow UI: http://localhost:3000
+  - MCP Orchestrator API: http://localhost:9000
+  - MCP WebSocket: ws://localhost:9001
+  - Grafana: http://localhost:3002 (when monitoring profile is active)
+  - VNC: vnc://localhost:5900 or http://localhost:6080
 
-  debug        Start the container with an interactive shell for debugging:
-                 $0 debug
-
-Data Persistence:
-  - Analysis outputs: ./.agent-mount/docker_analysis/
-  - Container logs: ./.agent-mount/docker_logs/
-  - Processing outputs: ./.agent-mount/docker_output/
-  - LaTeX projects: ./.agent-mount/docker_latex/
-  - Workspace files: ./.agent-mount/docker_workspace/
-  - General data: ./.agent-mount/docker_data/
-  - External files: ./.agent-mount/ext/
+Available Profiles:
+  - monitoring: Loki, Promtail, and Grafana for log aggregation and visualization
+  - tools: Development utilities container with MCP testing tools
+  - cache: Redis for MCP response caching
 EOF
 }
 
+# ---- Build command ---------------------
 build() {
   preflight
   detect_resources
-  ensure_claude_md
 
-  # Validate Dockerfile if hadolint is available
-  if command -v hadolint >/dev/null 2>&1; then
-    echo "Linting Dockerfile..."
-    hadolint Dockerfile || echo "Warning: Dockerfile linting failed"
-  fi
+  echo "Building enhanced powerdev images..."
 
-  export DOCKER_BUILDKIT=1
-  docker build \
-    --network=host \
-    --progress=plain \
-    --secret id=GH_TOKEN,env=GH_TOKEN \
-    -t "$IMAGE" . "${@:2}"
+  # Build with docker-compose
+  docker-compose -f "$COMPOSE_FILE" build "${@:2}"
+
+  echo "Build complete!"
 }
 
+# ---- Start command ---------------------
 start() {
+  preflight
   detect_resources
-  setup_run_opts
 
-  if docker ps -a --format '{{.Names}}' | grep -q "^${NAME}$"; then
-    docker start -ai "$NAME"
-  else
-    docker run "${RUN_OPTS[@]}" --name "$NAME" -it "$IMAGE"
-  fi
-}
+  local profiles=""
 
-daemon() {
-  detect_resources
-  setup_run_opts
-
-  if docker ps -a --format '{{.Names}}' | grep -q "^${NAME}$"; then
-    echo "Starting existing container in background..."
-    docker start "$NAME"
-  else
-    echo "Creating new container in background..."
-    docker run "${RUN_OPTS[@]}" --name "$NAME" -d "$IMAGE"
-  fi
-
-  echo "Container '$NAME' running in background"
-  echo "Access with: $0 exec bash"
-  echo "View logs with: $0 logs"
-  echo "Web UI available at: http://localhost:3000"
-}
-
-persist() {
-  if ! docker ps --format '{{.Names}}' | grep -q "^${NAME}$"; then
-    echo "Error: Container '$NAME' is not running"
-    return 1
-  fi
-
-  echo "Saving analysis outputs to persistent storage..."
-
-  # Create timestamped backup directory
-  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-  BACKUP_DIR="./.agent-mount/docker_analysis/backup_${TIMESTAMP}"
-  mkdir -p "$BACKUP_DIR"
-
-  # Copy container analysis data
-  docker cp "$NAME:/home/dev/analysis/." "$BACKUP_DIR/" 2>/dev/null || echo "No analysis data found"
-  docker cp "$NAME:/home/dev/output/." "./.agent-mount/docker_output/" 2>/dev/null || echo "No output data found"
-
-  # Export container logs
-  docker logs "$NAME" > "./.agent-mount/docker_logs/container_${TIMESTAMP}.log"
-
-  # Export container state
-  docker inspect "$NAME" > "${BACKUP_DIR}/container_state.json"
-
-  echo "Data saved to:"
-  echo "  - Analysis: $BACKUP_DIR/"
-  echo "  - Outputs: ./.agent-mount/docker_output/"
-  echo "  - Logs: ./.agent-mount/docker_logs/container_${TIMESTAMP}.log"
-  echo "  - State: $BACKUP_DIR/container_state.json"
-}
-
-exec() {
-  if ! docker ps --format '{{.Names}}' | grep -q "^${NAME}$"; then
-    echo "Error: Container '$NAME' is not running"
-    return 1
-  fi
-  docker exec -it -u dev "$NAME" "${@:2}"
-}
-
-logs() {
-  docker logs -f "$NAME"
-}
-
-health() {
-  docker inspect --format='{{.State.Health.Status}}' "$NAME"
-}
-
-stop() {
-  docker stop "$NAME"
-}
-
-rm() {
-  docker rm "$NAME"
-}
-
-restart() {
-  # Use docker restart for idempotency. It works if the container is running or stopped.
-  docker restart "$NAME"
-}
-
-status() {
-  if docker ps -a --format '{{.Names}}' | grep -q "^${NAME}$"; then
-    echo "Container Status:"
-    docker ps -a --filter "name=^${NAME}$" --format "table {{.Names}}\t{{.Status}}\t{{.State}}"
-    echo -e "\nHealth: $(health || echo 'N/A')"
-    echo "Ports: $(docker port "$NAME" 2>/dev/null || echo 'None')"
-    echo "Image: $(docker inspect --format='{{.Config.Image}}' "$NAME" 2>/dev/null || echo 'N/A')"
-    echo "Resource Usage:"
-    docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}\t{{.BlockIO}}" "$NAME" 2>/dev/null || echo "  Stats not available"
-  else
-    echo "Container '$NAME' does not exist"
-  fi
-}
-
-cleanup() {
-  echo "Cleaning up Docker resources..."
-  docker system prune -f
-  docker volume prune -f
-  echo "Cleanup complete"
-}
-
-watch() {
-  echo "Watching health for ${NAME}…"
-  while sleep 60; do
-    if ! docker ps --format '{{.Names}}' | grep -q "^${NAME}$"; then
-      echo "$(date) - Container not found, exiting watch"
-      break
-    fi
-    status_check=$(health || echo "none")
-    if [[ "$status_check" != "healthy" ]]; then
-      echo "$(date) - Container unhealthy ($status_check), restarting…"
-      restart
-      sleep 10  # Give container time to start
-    fi
+  # Add profiles if specified
+  for arg in "${@:2}"; do
+    profiles="$profiles --profile $arg"
   done
+
+  echo "Starting enhanced powerdev services..."
+  docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" $profiles up -d
+
+  echo ""
+  echo "Services started! Waiting for health checks..."
+  sleep 5
+
+  # Show status
+  status
+
+  echo ""
+  echo "Access points:"
+  echo "  - Claude Flow UI: http://localhost:3000"
+  echo "  - MCP Orchestrator API: http://localhost:9000"
+  echo "  - MCP WebSocket: ws://localhost:9001"
+
+  if [[ "$*" == *"monitoring"* ]]; then
+    echo "  - Grafana: http://localhost:3002 (admin/admin)"
+  fi
+}
+
+# ---- Stop command ---------------------
+stop() {
+  echo "Stopping all powerdev services..."
+  docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" down
+  echo "Services stopped."
+}
+
+# ---- Restart command ---------------------
+restart() {
+  stop
+  sleep 2
+  start "$@"
+}
+
+# ---- Status command ---------------------
+status() {
+  echo "PowerDev Service Status:"
+  echo "========================"
+  docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" ps
+
+  echo ""
+  echo "Container Health:"
+  docker ps --filter "label=com.docker.compose.project=$PROJECT_NAME" \
+            --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+  # Check orchestrator health
+  echo ""
+  echo "Orchestrator Health:"
+  if curl -s http://localhost:9000/health | jq . 2>/dev/null; then
+    echo "✓ Orchestrator is healthy"
+  else
+    echo "✗ Orchestrator is not responding"
+  fi
+}
+
+# ---- Logs command ---------------------
+logs() {
+  local service="${2:-}"
+  shift
+
+  if [[ -z "$service" ]]; then
+    docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" logs "${@:2}"
+  else
+    # Map friendly names
+    case $service in
+      main) service="powerdev-main" ;;
+      orchestrator) service="mcp-orchestrator" ;;
+      tools) service="mcp-tools" ;;
+    esac
+
+    docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" logs "${@:2}" "$service"
+  fi
+}
+
+# ---- Shell command ---------------------
+shell() {
+  local service="${2:-main}"
+
+  # Map friendly names to service names
+  case $service in
+    main) service="powerdev-main" ;;
+    orchestrator) service="mcp-orchestrator" ;;
+    tools) service="mcp-tools" ;;
+  esac
+
+  echo "Opening shell in $service..."
+  docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" exec "$service" /bin/bash
+}
+
+# ---- Health command ---------------------
+health() {
+  echo "Running comprehensive health checks..."
+
+  # Use the MCP manager script
+  if [[ -x "./mcp-scripts/mcp-manager.sh" ]]; then
+    ./mcp-scripts/mcp-manager.sh health
+  else
+    echo "Error: mcp-manager.sh not found or not executable"
+    echo "Running basic health check..."
+
+    # Basic health check
+    if docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" exec powerdev-main /app/mcp-scripts/health-check.sh; then
+      echo "✓ Basic health check passed"
+    else
+      echo "✗ Basic health check failed"
+    fi
+  fi
+}
+
+# ---- Monitor command ---------------------
+monitor() {
+  echo "Opening monitoring dashboard..."
+
+  # Check if monitoring profile is active
+  if ! docker ps --filter "name=powerdev-grafana" -q | grep -q .; then
+    echo "Grafana is not running. Starting monitoring stack..."
+    start monitoring
+    echo "Waiting for Grafana to be ready..."
+    sleep 10
+  fi
+
+  echo "Opening Grafana dashboard at http://localhost:3002"
+  echo "Default credentials: admin/admin"
+
+  # Try to open in browser
+  if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open http://localhost:3002
+  elif command -v open >/dev/null 2>&1; then
+    open http://localhost:3002
+  else
+    echo "Please open http://localhost:3002 in your browser"
+  fi
+}
+
+# ---- Tools command ---------------------
+tools() {
+  local tool="${2:-}"
+
+  case $tool in
+    ws-test)
+      echo "Testing WebSocket connection..."
+      if [[ -x "./mcp-scripts/mcp-manager.sh" ]]; then
+        ./mcp-scripts/mcp-manager.sh test-ws
+      else
+        echo "Running basic WebSocket test..."
+        docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" exec mcp-tools python3 /app/ws-test-client.py
+      fi
+      ;;
+
+    api-test)
+      echo "Testing REST API..."
+      if [[ -x "./mcp-scripts/mcp-manager.sh" ]]; then
+        ./mcp-scripts/mcp-manager.sh test-api
+      else
+        echo "Running basic API test..."
+        curl -s http://localhost:9000/health | jq .
+      fi
+      ;;
+
+    *)
+      echo "Available tools:"
+      echo "  ws-test   - Test WebSocket connection"
+      echo "  api-test  - Test REST API endpoints"
+      ;;
+  esac
+}
+
+# ---- Cleanup command ---------------------
+cleanup() {
+  echo "This will remove all containers and volumes. Are you sure? (y/N)"
+  read -r response
+
+  if [[ "$response" =~ ^[Yy]$ ]]; then
+    echo "Stopping and removing all containers..."
+    docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" down -v
+
+    echo "Cleaning up Docker resources..."
+    docker system prune -f
+    docker volume prune -f
+
+    echo "Cleanup complete."
+  else
+    echo "Cleanup cancelled."
+  fi
 }
 
 # ---- Shell completion ---------------------
-_powerdev_completion() {
-  COMPREPLY=($(compgen -W "build start daemon exec logs health status stop rm restart watch cleanup persist" -- "${COMP_WORDS[COMP_CWORD]}"))
+_powerdev_enhanced_completion() {
+  local cur="${COMP_WORDS[COMP_CWORD]}"
+  local prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+  local commands="build start stop restart status logs shell health monitor tools cleanup"
+  local profiles="monitoring tools cache"
+  local tools_cmds="ws-test api-test"
+
+  case "$prev" in
+    start|restart)
+      COMPREPLY=($(compgen -W "$profiles" -- "$cur"))
+      ;;
+    tools)
+      COMPREPLY=($(compgen -W "$tools_cmds" -- "$cur"))
+      ;;
+    *)
+      COMPREPLY=($(compgen -W "$commands" -- "$cur"))
+      ;;
+  esac
 }
-complete -F _powerdev_completion powerdev.sh
+complete -F _powerdev_enhanced_completion powerdev-enhanced.sh
 
 # ---- Graceful shutdown handler ---------------------
 trap 'echo "Shutting down..."; stop 2>/dev/null; exit' SIGINT SIGTERM
 
-debug() {
-  detect_resources
-  setup_run_opts
-
-  docker run "${RUN_OPTS[@]}" --entrypoint /bin/bash --name "$NAME-debug" -it "$IMAGE"
-}
-
-# Entry point
+# ---- Main entry point ---------------------
 if [[ $# -eq 0 ]]; then
   help
   exit 1
 fi
 
 case $1 in
-  build|start|daemon|exec|logs|health|status|stop|rm|restart|watch|cleanup|persist|debug)
+  build|start|stop|restart|status|logs|shell|health|monitor|tools|cleanup)
     "$@"
     ;;
   *)
     help
+    exit 1
     ;;
 esac

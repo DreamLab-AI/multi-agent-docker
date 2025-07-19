@@ -17,7 +17,7 @@ RUN apk add --no-cache \
 COPY orchestrator/package*.json ./
 
 # Install Node dependencies
-RUN npm ci --only=production
+RUN npm install --only=production
 
 # Copy orchestrator source code
 COPY orchestrator/ ./

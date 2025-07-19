@@ -1,17 +1,17 @@
 version: '3.8'
 
 services:
-  # Main 3D MCP development container with all servers integrated
-  blender-dev:
+  # Main development container with all MCP tools
+  powerdev-main:
     build:
       context: .
       dockerfile: Dockerfile
       args:
         - BLENDER_DOWNLOAD_URL=https://mirror.clarkson.edu/blender/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz
-    image: blender-mcp-dev:latest
-    container_name: blender-mcp-container
+    image: powerdev:latest
+    container_name: powerdev-main
 
-    # GPU support - enabled by default, will gracefully fail if no GPU
+    # GPU support
     deploy:
       resources:
         reservations:
@@ -21,151 +21,272 @@ services:
               capabilities: [gpu]
 
     environment:
-      # Display settings for GUI applications
+      # Display settings
       - DISPLAY=:99
       - VNC_RESOLUTION=1920x1080
       - VNC_COL_DEPTH=24
-      - VNC_PASSWORD=mcpserver  # Change this for production
+      - VNC_PASSWORD=mcpserver
 
       # GPU settings
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all
 
-      # MCP server configuration - servers bind to 0.0.0.0 for external access
+      # MCP configuration
       - MCP_LOG_LEVEL=debug
       - BLENDER_MCP_HOST=0.0.0.0
       - BLENDER_MCP_PORT=9876
       - REVIT_MCP_PORT=8080
       - UNREAL_MCP_PORT=55557
 
+      # Remote MCP host (if using external servers)
+      - REMOTE_MCP_HOST=${REMOTE_MCP_HOST:-}
+
       # Python settings
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app:/workspace
 
-      # Network settings for host communication
-      # Docker Desktop uses host.docker.internal
-      # Linux may need to use host-gateway or bridge IP
-      - HOST_GATEWAY=host.docker.internal
-
     ports:
-      # MCP Server Ports - these are the main ports for accessing MCP servers from host
-      - "9876:9876"    # Blender MCP TCP server - connect via localhost:9876
-      - "8080:8080"    # Revit MCP server - connect via localhost:8080
-      - "55557:55557"  # Unreal MCP TCP server - connect via localhost:55557
+      # MCP Server Ports
+      - "9876:9876"
+      - "8080:8080"
+      - "55557:55557"
 
       # UI/Service Ports
       - "3000:3000"    # Claude Flow UI
       - "3001:3001"    # Additional services
 
-      # Remote Access Ports (optional - comment out if not needed)
-      - "5900:5900"    # VNC for remote desktop access
-      - "6080:6080"    # noVNC for web-based VNC access
+      # VNC Ports
+      - "5900:5900"
+      - "6080:6080"
 
-      # Development Ports (optional)
-      - "8000:8000"    # Development server
-      - "8888:8888"    # Jupyter notebook
+      # Development Ports
+      - "8000:8000"
+      - "8888:8888"
 
     volumes:
-      # Main workspace volume
       - ./workspace:/workspace
       - ./blender-files:/blender-files
-
-      # X11 socket for GUI applications (Linux only, comment out on Mac/Windows)
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-
-      # Docker socket for container management (optional, adds security risk)
-      # - /var/run/docker.sock:/var/run/docker.sock
-
-      # MCP configuration and logs persistence
-      - ./mcp-configs:/app/mcp-configs
-      - ./mcp-logs:/app/mcp-logs
-
-      # Persist VNC settings
+      - mcp-configs:/app/mcp-configs
+      - mcp-logs:/app/mcp-logs
       - vnc-data:/home/dev/.vnc
-
-      # Persist Claude settings
       - claude-settings:/home/dev/.claude
+      - agent-data:/app/agent-data
 
-    # Run in interactive mode by default
     command: ["--interactive"]
-
-    # Keep stdin open and allocate a pseudo-TTY
     stdin_open: true
     tty: true
 
-    # Network configuration - ensures proper host communication
     networks:
-      mcp-net:
-        ipv4_address: 172.20.0.10  # Static IP for consistent access
+      powerdev-net:
+        ipv4_address: 172.25.0.10
 
-    # Extra hosts for better host system communication
     extra_hosts:
-      - "host.docker.internal:host-gateway"  # Works on Docker Desktop
-      - "mcp-host:host-gateway"              # Alternative hostname
+      - "host.docker.internal:host-gateway"
+      - "mcp-host:host-gateway"
 
-    # Security options
     security_opt:
       - seccomp:unconfined
-      - apparmor:unconfined  # Fixed typo
+      - apparmor:unconfined
     cap_add:
       - SYS_PTRACE
-      - NET_ADMIN  # For network debugging tools
+      - NET_ADMIN
 
-    # Resource limits - adjust based on your system
-    mem_limit: 16g      # Increase for 3D applications
-    cpus: "8.0"         # Use more CPUs if available
-    shm_size: '2gb'     # Shared memory for GPU operations
+    mem_limit: 16g
+    cpus: "8.0"
+    shm_size: '2gb'
 
-    # Healthcheck - verifies MCP servers are accessible
     healthcheck:
-      test: ["CMD", "/bin/bash", "-c", "nc -z localhost 9876 || nc -z localhost 8080 || nc -z localhost 55557"]
+      test: ["CMD", "/app/mcp-scripts/health-check.sh"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
 
-    # Restart policy
     restart: unless-stopped
 
-  # Optional: Claude Flow standalone service
-  # Enable with: docker-compose --profile standalone up
-  claude-flow:
-    image: blender-mcp-dev:latest
-    container_name: claude-flow-ui
-    command: ["npx", "claude-flow@alpha", "start", "--ui", "--port", "3000"]
+  # MCP Orchestrator Service - manages all MCP servers and exposes WebSocket API
+  mcp-orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.orchestrator
+    image: powerdev-orchestrator:latest
+    container_name: powerdev-mcp-orchestrator
+
+    environment:
+      - NODE_ENV=development
+      - MCP_ORCHESTRATOR_PORT=9000
+      - WEBSOCKET_PORT=9001
+      - LOG_LEVEL=debug
+      - MCP_SERVERS=blender:9876,revit:8080,unreal:55557
+      - CLAUDE_FLOW_HOST=powerdev-main
+      - CLAUDE_FLOW_PORT=3000
+
+    ports:
+      - "9000:9000"    # REST API
+      - "9001:9001"    # WebSocket API for visualization
+
+    volumes:
+      - mcp-logs:/app/logs:ro
+      - agent-data:/app/agent-data
+      - orchestrator-data:/app/data
+
+    networks:
+      powerdev-net:
+        ipv4_address: 172.25.0.20
+
+    depends_on:
+      - powerdev-main
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+    restart: unless-stopped
+
+  # Development utilities container with MCP testing tools
+  mcp-tools:
+    build:
+      context: .
+      dockerfile: Dockerfile.tools
+    image: powerdev-tools:latest
+    container_name: powerdev-mcp-tools
+
+    environment:
+      - MCP_ORCHESTRATOR_URL=http://mcp-orchestrator:9000
+      - WEBSOCKET_URL=ws://mcp-orchestrator:9001
+
+    volumes:
+      - ./mcp-tests:/app/tests
+      - test-results:/app/results
+
+    networks:
+      - powerdev-net
+
+    profiles:
+      - tools
+
+    command: ["tail", "-f", "/dev/null"]
+
+  # Centralized logging with Loki
+  loki:
+    image: grafana/loki:latest
+    container_name: powerdev-loki
+
+    ports:
+      - "3100:3100"
+
+    volumes:
+      - loki-data:/loki
+      - ./loki-config.yml:/etc/loki/local-config.yaml:ro
+
+    command: -config.file=/etc/loki/local-config.yaml
+
+    networks:
+      - powerdev-net
+
+    profiles:
+      - monitoring
+
+  # Promtail for log collection
+  promtail:
+    image: grafana/promtail:latest
+    container_name: powerdev-promtail
+
+    volumes:
+      - mcp-logs:/var/log/mcp:ro
+      - ./promtail-config.yml:/etc/promtail/config.yml:ro
+
+    command: -config.file=/etc/promtail/config.yml
+
+    networks:
+      - powerdev-net
+
+    depends_on:
+      - loki
+
+    profiles:
+      - monitoring
+
+  # Grafana for visualization (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: powerdev-grafana
+
     ports:
       - "3002:3000"
-    environment:
-      - NODE_ENV=production
-    networks:
-      - mcp-net
-    profiles:
-      - standalone
-    depends_on:
-      - blender-dev
 
-# Network configuration for MCP servers
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=redis-datasource
+
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+
+    networks:
+      - powerdev-net
+
+    depends_on:
+      - loki
+
+    profiles:
+      - monitoring
+
+  # Redis for caching MCP responses (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: powerdev-redis
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - redis-data:/data
+
+    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru
+
+    networks:
+      - powerdev-net
+
+    profiles:
+      - cache
+
+# Networks
 networks:
-  mcp-net:
+  powerdev-net:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/16
-          gateway: 172.20.0.1
+        - subnet: 172.25.0.0/16
+          gateway: 172.25.0.1
     driver_opts:
-      # Custom bridge name for easier identification
-      com.docker.network.bridge.name: mcp_bridge
-      # Enable inter-container communication
+      com.docker.network.bridge.name: powerdev_bridge
       com.docker.network.bridge.enable_icc: "true"
-      # Enable IP masquerading for external access
       com.docker.network.bridge.enable_ip_masquerade: "true"
-      # Bind to all interfaces for maximum compatibility
-      com.docker.network.bridge.host_binding_ipv4: "0.0.0.0"
 
-# Named volumes for persistence
+# Volumes
 volumes:
   workspace:
   blender-files:
   vnc-data:
   claude-settings:
   mcp-logs:
+  mcp-configs:
+  agent-data:
+  orchestrator-data:
+  loki-data:
+  grafana-data:
+  redis-data:
+  test-results:
+
+# Usage:
+#   Default (main container only): docker-compose -f docker-compose.enhanced.yml up
+#   With monitoring: docker-compose -f docker-compose.enhanced.yml --profile monitoring up
+#   With tools: docker-compose -f docker-compose.enhanced.yml --profile tools up
+#   With cache: docker-compose -f docker-compose.enhanced.yml --profile cache up
+#   All features: docker-compose -f docker-compose.enhanced.yml --profile monitoring --profile tools --profile cache up
