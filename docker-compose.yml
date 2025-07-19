@@ -1,17 +1,14 @@
-version: '3.8'
-
 services:
-  # Main development container with all MCP tools
-  powerdev-main:
+  blender-dev:
     build:
       context: .
       dockerfile: Dockerfile
       args:
         - BLENDER_DOWNLOAD_URL=https://mirror.clarkson.edu/blender/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz
-    image: powerdev:latest
-    container_name: powerdev-main
+    image: blender-mcp-dev:latest
+    container_name: blender-mcp-container
 
-    # GPU support
+    # GPU support (uncomment if you have NVIDIA GPU)
     deploy:
       resources:
         reservations:
@@ -21,263 +18,74 @@ services:
               capabilities: [gpu]
 
     environment:
-      # Display settings
       - DISPLAY=:99
-
-      # GPU settings
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all
-
-      # MCP configuration
-      - MCP_LOG_LEVEL=debug
-      - BLENDER_MCP_HOST=0.0.0.0
-      - BLENDER_MCP_PORT=9876
-      - REVIT_MCP_PORT=8080
-      - UNREAL_MCP_PORT=55557
-
-      # Remote MCP host (if using external servers)
-      - REMOTE_MCP_HOST=${REMOTE_MCP_HOST:-}
-
-      # Python settings
       - PYTHONUNBUFFERED=1
-      - PYTHONPATH=/app:/workspace
 
     ports:
-      # MCP Server Ports
-      - "9876:9876"
-      - "8080:8080"
-      - "55557:55557"
-
-      # UI/Service Ports
+      - "9876:9876"    # Blender MCP server
       - "3000:3000"    # Claude Flow UI
       - "3001:3001"    # Additional services
-
-      # Development Ports
-      - "8000:8000"
-      - "8888:8888"
 
     volumes:
       - ./workspace:/workspace
       - ./blender-files:/blender-files
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - mcp-configs:/app/mcp-configs
-      - mcp-logs:/app/mcp-logs
-      - claude-settings:/home/dev/.claude
-      - agent-data:/app/agent-data
 
+    # Run in interactive mode by default
     command: ["--interactive"]
+
+    # Keep stdin open and allocate a pseudo-TTY
     stdin_open: true
     tty: true
 
-    networks:
-      powerdev-net:
-        ipv4_address: 172.25.0.10
-
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-      - "mcp-host:host-gateway"
-
+    # Security options
     security_opt:
       - seccomp:unconfined
-      - apparmor:unconfined
+      - apparmor:unconfirmed
     cap_add:
       - SYS_PTRACE
-      - NET_ADMIN
 
-    mem_limit: 16g
-    cpus: "8.0"
-    shm_size: '2gb'
+    # Resource limits
+    mem_limit: 8g
+    cpus: "4.0"
 
+    # Healthcheck
     healthcheck:
-      test: ["CMD", "/app/mcp-scripts/health-check.sh"]
+      test: ["CMD", "pgrep", "-f", "blender"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
 
+    # Restart policy
     restart: unless-stopped
 
-  # MCP Orchestrator Service - manages all MCP servers and exposes WebSocket API
-  mcp-orchestrator:
-    build:
-      context: .
-      dockerfile: Dockerfile.orchestrator
-    image: powerdev-orchestrator:latest
-    container_name: powerdev-mcp-orchestrator
-
-    environment:
-      - NODE_ENV=development
-      - MCP_ORCHESTRATOR_PORT=9000
-      - WEBSOCKET_PORT=9001
-      - LOG_LEVEL=debug
-      - MCP_SERVERS=blender:9876,revit:8080,unreal:55557
-      - CLAUDE_FLOW_HOST=powerdev-main
-      - CLAUDE_FLOW_PORT=3000
-
-    ports:
-      - "9000:9000"    # REST API
-      - "9001:9001"    # WebSocket API for visualization
-
-    volumes:
-      - mcp-logs:/app/logs:ro
-      - agent-data:/app/agent-data
-      - orchestrator-data:/app/data
-
     networks:
-      powerdev-net:
-        ipv4_address: 172.25.0.20
+      - blender-net
 
-    depends_on:
-      - powerdev-main
-
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-
-    restart: unless-stopped
-
-  # Development utilities container with MCP testing tools
-  mcp-tools:
-    build:
-      context: .
-      dockerfile: Dockerfile.tools
-    image: powerdev-tools:latest
-    container_name: powerdev-mcp-tools
-
-    environment:
-      - MCP_ORCHESTRATOR_URL=http://mcp-orchestrator:9000
-      - WEBSOCKET_URL=ws://mcp-orchestrator:9001
-
-    volumes:
-      - ./mcp-tests:/app/tests
-      - test-results:/app/results
-
-    networks:
-      - powerdev-net
-
-    profiles:
-      - tools
-
-    command: ["tail", "-f", "/dev/null"]
-
-  # Centralized logging with Loki
-  loki:
-    image: grafana/loki:latest
-    container_name: powerdev-loki
-
-    ports:
-      - "3100:3100"
-
-    volumes:
-      - loki-data:/loki
-      - ./loki-config.yml:/etc/loki/local-config.yaml:ro
-
-    command: -config.file=/etc/loki/local-config.yaml
-
-    networks:
-      - powerdev-net
-
-    profiles:
-      - monitoring
-
-  # Promtail for log collection
-  promtail:
-    image: grafana/promtail:latest
-    container_name: powerdev-promtail
-
-    volumes:
-      - mcp-logs:/var/log/mcp:ro
-      - ./promtail-config.yml:/etc/promtail/config.yml:ro
-
-    command: -config.file=/etc/promtail/config.yml
-
-    networks:
-      - powerdev-net
-
-    depends_on:
-      - loki
-
-    profiles:
-      - monitoring
-
-  # Grafana for visualization (optional)
-  grafana:
-    image: grafana/grafana:latest
-    container_name: powerdev-grafana
-
+  # Optional: Claude Flow standalone service
+  claude-flow:
+    image: blender-mcp-dev:latest
+    container_name: claude-flow-ui
+    command: ["claude-flow", "start", "--ui", "--port", "3000"]
     ports:
       - "3002:3000"
-
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_INSTALL_PLUGINS=redis-datasource
-
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
-
+      - NODE_ENV=production
     networks:
-      - powerdev-net
-
-    depends_on:
-      - loki
-
+      - blender-net
     profiles:
-      - monitoring
+      - standalone
 
-  # Redis for caching MCP responses (optional)
-  redis:
-    image: redis:7-alpine
-    container_name: powerdev-redis
-
-    ports:
-      - "6379:6379"
-
-    volumes:
-      - redis-data:/data
-
-    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru
-
-    networks:
-      - powerdev-net
-
-    profiles:
-      - cache
-
-# Networks
 networks:
-  powerdev-net:
+  blender-net:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.25.0.0/16
-          gateway: 172.25.0.1
-    driver_opts:
-      com.docker.network.bridge.name: powerdev_bridge
-      com.docker.network.bridge.enable_icc: "true"
-      com.docker.network.bridge.enable_ip_masquerade: "true"
+        - subnet: 172.20.0.0/16
 
-# Volumes
 volumes:
   workspace:
   blender-files:
-  claude-settings:
-  mcp-logs:
-  mcp-configs:
-  agent-data:
-  orchestrator-data:
-  loki-data:
-  grafana-data:
-  redis-data:
-  test-results:
-
-# Usage:
-#   Default (main container only): docker-compose -f docker-compose.enhanced.yml up
-#   With monitoring: docker-compose -f docker-compose.enhanced.yml --profile monitoring up
-#   With tools: docker-compose -f docker-compose.enhanced.yml --profile tools up
-#   With cache: docker-compose -f docker-compose.enhanced.yml --profile cache up
-#   All features: docker-compose -f docker-compose.enhanced.yml --profile monitoring --profile tools --profile cache up
