@@ -30,23 +30,12 @@ wait_for_port() {
     return 0
 }
 
-# Start X Virtual Framebuffer for GUI applications
+# Start X Virtual Framebuffer for GUI applications (headless)
 echo "--- Starting X Virtual Framebuffer ---"
 rm -f /tmp/.X99-lock
-Xvfb :99 -screen 0 ${VNC_RESOLUTION}x${VNC_COL_DEPTH} -ac +extension GLX +render -noreset &
+Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset &
 export DISPLAY=:99
 sleep 2
-
-# Start VNC Server if enabled (default: true)
-if [ "${ENABLE_VNC:-true}" = "true" ]; then
-    echo "--- Starting VNC Server ---"
-    # Start VNC server with password from environment or default
-    x11vnc -display :99 -forever -usepw -shared -rfbport 5900 -bg -o /app/mcp-logs/vnc.log
-
-    # Start noVNC for web access
-    echo "--- Starting noVNC Web Interface ---"
-    websockify -D --web=/usr/share/novnc/ 6080 localhost:5900 &> /app/mcp-logs/novnc.log &
-fi
 
 # Initialize Claude Flow and Ruv Swarm
 echo "--- Initializing Claude Flow and Ruv Swarm ---"
@@ -170,8 +159,6 @@ alias blender-log='tmux attach-session -t blender-mcp'
 alias revit-log='tmux attach-session -t revit-mcp'
 alias unreal-log='tmux attach-session -t unreal-mcp'
 
-# VNC information
-alias vnc-info='echo "VNC Access:"; echo "  - Direct VNC: vnc://localhost:5900 (password: ${VNC_PASSWORD:-mcpserver})"; echo "  - Web VNC: http://localhost:6080"'
 
 # Network debugging
 alias mcp-netstat='netstat -tuln | grep -E "(9876|8080|55557)"'
@@ -187,7 +174,6 @@ echo "Quick Commands:"
 echo "  mcp-status    - Check all server status"
 echo "  mcp-logs      - View all server logs"
 echo "  mcp-test-all  - Test all MCP connections"
-echo "  vnc-info      - Get VNC access details"
 echo ""
 EOF
 
@@ -201,12 +187,6 @@ echo "  - Revit MCP: localhost:8080"
 echo "  - Unreal MCP: localhost:55557"
 echo ""
 
-if [ "${ENABLE_VNC:-true}" = "true" ]; then
-    echo "Remote Access:"
-    echo "  - VNC: vnc://localhost:5900 (password: ${VNC_PASSWORD:-mcpserver})"
-    echo "  - Web VNC: http://localhost:6080"
-    echo ""
-fi
 
 echo "Network Information:"
 echo "  - Container IP: $(hostname -I | awk '{print $1}')"

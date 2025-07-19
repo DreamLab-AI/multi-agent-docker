@@ -15,7 +15,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ca-certificates curl gnupg software-properties-common wget \
     build-essential git pkg-config libssl-dev \
-    xvfb x11vnc fluxbox novnc websockify supervisor \
+    xvfb supervisor \
     netcat-openbsd net-tools iputils-ping dnsutils \
     python3.12 python3.12-venv python3.12-dev \
     nodejs npm \
@@ -72,10 +72,6 @@ ENV BLENDER_VERSION="4.5"
 ENV BLENDER_PATH="/usr/local/blender"
 ENV APP_HOME="/app"
 ENV DISPLAY=:99
-ENV VNC_PORT=5900
-ENV NO_VNC_PORT=6080
-ENV VNC_COL_DEPTH=24
-ENV VNC_RESOLUTION=1920x1080
 ENV MCP_LOG_LEVEL=debug
 ENV PYTHONPATH="${APP_HOME}:/workspace"
 
@@ -106,13 +102,14 @@ RUN chmod +x /entrypoint.sh /app/mcp-scripts/*.sh
 ARG UID=1000
 ARG GID=1000
 
-RUN groupadd -g ${GID} dev && \
+RUN if getent passwd dev > /dev/null; then userdel dev; fi && \
+    if getent group dev > /dev/null; then groupdel dev; fi && \
+    groupadd -g ${GID} dev && \
     useradd -m -s /bin/bash -u ${UID} -g ${GID} dev && \
     usermod -aG sudo dev && \
     echo "dev ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev && \
-    mkdir -p /workspace /home/dev/.vnc && \
-    chown -R dev:dev /workspace /app /home/dev && \
-    x11vnc -storepasswd ${VNC_PASSWORD:-mcpserver} /home/dev/.vnc/passwd
+    mkdir -p /workspace && \
+    chown -R dev:dev /workspace /app /home/dev
 
 USER dev
 WORKDIR /workspace
@@ -127,7 +124,7 @@ RUN git config --global user.email "mcp@3d-docker.local" && \
     echo '{"mcpServers": {}}' > /home/dev/.claude/settings.json
 
 # Expose ports
-EXPOSE 9876 8080 55557 3000 3001 5900 6080 8000 8888
+EXPOSE 9876 8080 55557 3000 3001 8000 8888
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \

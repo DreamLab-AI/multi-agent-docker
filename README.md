@@ -225,7 +225,7 @@ Complete API documentation is available in `MCP_VISUALIZATION_API.md`, including
 
 ## 🔐 Security Considerations
 
-1. **Default passwords** - Change VNC and Grafana passwords in production
+1. **Default passwords** - Change Grafana passwords in production
 2. **Network isolation** - Use custom networks for service isolation
 3. **Rate limiting** - REST API limited to 100 requests per 15 minutes
 4. **Authentication** - Add authentication for production deployments

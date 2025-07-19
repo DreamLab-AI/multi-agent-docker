@@ -28,19 +28,9 @@ wait_for_port() {
 
 # Start X Virtual Framebuffer
 echo "--- Starting X Virtual Framebuffer ---"
-Xvfb :99 -screen 0 ${VNC_RESOLUTION}x${VNC_COL_DEPTH} -ac +extension GLX +render -noreset &
+Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset &
 export DISPLAY=:99
 sleep 2
-
-# Start VNC Server (optional)
-if [ "${ENABLE_VNC:-true}" = "true" ]; then
-    echo "--- Starting VNC Server ---"
-    x11vnc -display :99 -forever -usepw -shared -rfbport 5900 -bg -o /app/mcp-logs/vnc.log
-
-    # Start noVNC
-    echo "--- Starting noVNC Web Interface ---"
-    websockify -D --web=/usr/share/novnc/ --cert=/home/dev/.vnc/novnc.pem 6080 localhost:5900
-fi
 
 # Initialize Claude Flow and Ruv Swarm
 echo "--- Initializing Claude Flow and Ruv Swarm ---"
@@ -158,12 +148,9 @@ alias blender-log='tmux attach-session -t blender-mcp'
 alias revit-log='tmux attach-session -t revit-mcp'
 alias unreal-log='tmux attach-session -t unreal-mcp'
 
-# VNC info
-alias vnc-info='echo "VNC: vnc://localhost:5900 (password: mcpserver) | Web: http://localhost:6080"'
 
 echo "MCP 3D Environment Ready!"
 echo "Run 'mcp-status' to check server status"
-echo "Run 'vnc-info' for remote access details"
 EOF
 
 # Print connection information
@@ -173,10 +160,6 @@ echo "MCP Servers:"
 echo "  - Blender MCP: localhost:9876 (or host.docker.internal:9876 from host)"
 echo "  - Revit MCP: localhost:8080 (or host.docker.internal:8080 from host)"
 echo "  - Unreal MCP: localhost:55557 (or host.docker.internal:55557 from host)"
-echo ""
-echo "Remote Access:"
-echo "  - VNC: vnc://localhost:5900 (password: mcpserver)"
-echo "  - Web VNC: http://localhost:6080"
 echo ""
 echo "Management:"
 echo "  - Run 'mcp-status' to check server status"

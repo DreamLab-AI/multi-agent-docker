@@ -23,9 +23,6 @@ services:
     environment:
       # Display settings
       - DISPLAY=:99
-      - VNC_RESOLUTION=1920x1080
-      - VNC_COL_DEPTH=24
-      - VNC_PASSWORD=mcpserver
 
       # GPU settings
       - NVIDIA_VISIBLE_DEVICES=all
@@ -55,10 +52,6 @@ services:
       - "3000:3000"    # Claude Flow UI
       - "3001:3001"    # Additional services
 
-      # VNC Ports
-      - "5900:5900"
-      - "6080:6080"
-
       # Development Ports
       - "8000:8000"
       - "8888:8888"
@@ -69,7 +62,6 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - mcp-configs:/app/mcp-configs
       - mcp-logs:/app/mcp-logs
-      - vnc-data:/home/dev/.vnc
       - claude-settings:/home/dev/.claude
       - agent-data:/app/agent-data
 
@@ -273,7 +265,6 @@ networks:
 volumes:
   workspace:
   blender-files:
-  vnc-data:
   claude-settings:
   mcp-logs:
   mcp-configs:

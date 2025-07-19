@@ -90,8 +90,6 @@ POLL_INTERVAL=5000
 # Grafana password
 GRAFANA_PASSWORD=admin
 
-# VNC password
-VNC_PASSWORD=mcpserver
 EOF
     echo ".env file created with defaults"
   fi
@@ -167,7 +165,6 @@ Service URLs:
   - MCP Orchestrator API: http://localhost:9000
   - MCP WebSocket: ws://localhost:9001
   - Grafana: http://localhost:3002 (when monitoring profile is active)
-  - VNC: vnc://localhost:5900 or http://localhost:6080
 
 Available Profiles:
   - monitoring: Loki, Promtail, and Grafana for log aggregation and visualization
