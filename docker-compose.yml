@@ -24,9 +24,11 @@ services:
       - PYTHONUNBUFFERED=1
 
     ports:
-      - "9876:9876"    # Blender MCP server
+      - "9876:9876"    # Blender MCP server (for local Blender if needed)
       - "3000:3000"    # Claude Flow UI
       - "3001:3001"    # Additional services
+      - "8080:8080"    # Web services
+      - "5173:5173"    # Vite dev server
 
     volumes:
       - ./workspace:/workspace
@@ -64,7 +66,10 @@ services:
     restart: unless-stopped
 
     networks:
-      - docker_ragflow
+      - powerdev-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "blender-host:192.168.0.216"  # Direct mapping for Blender MCP server
 
   # Optional: Claude Flow standalone service
   claude-flow:
@@ -76,13 +81,16 @@ services:
     environment:
       - NODE_ENV=production
     networks:
-      - docker_ragflow
+      - powerdev-network
     profiles:
       - standalone
 
 networks:
-  docker_ragflow:
-    external: true
+  powerdev-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 
 volumes:
   workspace:

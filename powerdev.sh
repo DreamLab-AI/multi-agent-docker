@@ -113,7 +113,7 @@ validate_config() {
 # ---- Help message ---------------------
 help() {
   cat <<EOF
-Usage: $0 {build|start|stop|restart|status|logs|shell|health|monitor|tools|cleanup|rm}
+Usage: $0 {build|start|stop|restart|status|logs|shell|health|monitor|tools|cleanup|rm|mcp}
 
 PowerDev Commands:
 
@@ -162,6 +162,12 @@ PowerDev Commands:
 
   rm                   Remove orphan containers:
                        $0 rm
+
+  mcp [action]         MCP server management:
+                       $0 mcp status       # Check MCP server status
+                       $0 mcp init         # Initialize MCP servers
+                       $0 mcp test-blender # Test Blender MCP connection
+                       $0 mcp logs         # View MCP server logs
 
 Service URLs:
   - Claude Flow UI: http://localhost:3000
@@ -421,6 +427,35 @@ _powerdev_completion() {
 }
 complete -F _powerdev_completion powerdev.sh
 
+# ---- MCP commands ---------------------
+mcp() {
+  local action="${2:-status}"
+  
+  case $action in
+    status)
+      echo "Checking MCP server status..."
+      docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" exec powerdev bash -c "cd /workspace && ./mcp-status.sh"
+      ;;
+    init)
+      echo "Initializing MCP servers..."
+      docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" exec powerdev bash -c "cd /workspace && ./init-mcp-servers.sh"
+      ;;
+    test-blender)
+      echo "Testing Blender MCP connection..."
+      docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" exec powerdev bash -c "cd /workspace && BLENDER_HOST=${BLENDER_HOST:-192.168.0.216} BLENDER_PORT=${BLENDER_PORT:-9876} ./test-blender-mcp.sh"
+      ;;
+    logs)
+      local server="${3:-all}"
+      echo "Showing MCP logs for: $server"
+      docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" exec powerdev bash -c "tail -f /workspace/mcp-logs/*.log"
+      ;;
+    *)
+      echo "Unknown MCP action: $action"
+      echo "Available actions: status, init, test-blender, logs"
+      ;;
+  esac
+}
+
 # ---- Graceful shutdown handler ---------------------
 trap 'echo "Shutting down..."; stop 2>/dev/null; exit' SIGINT SIGTERM
 
@@ -431,7 +466,7 @@ if [[ $# -eq 0 ]]; then
 fi
 
 case $1 in
-  build|start|stop|restart|status|logs|shell|health|monitor|tools|cleanup|rm)
+  build|start|stop|restart|status|logs|shell|health|monitor|tools|cleanup|rm|mcp)
     case $1 in
       rm)
         rm_orphans

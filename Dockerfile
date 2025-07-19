@@ -35,13 +35,16 @@ RUN echo \
 RUN add-apt-repository -y ppa:deadsnakes/ppa
 # Add NodeSource repository for up-to-date NodeJS (v22+)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-# Install all packages
+# Install all packages including network utilities
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       wget libxi6 libxxf86vm1 libxfixes3 libxrender1 \
       build-essential clang git pkg-config libssl-dev \
       lsb-release shellcheck hyperfine openssh-client tmux sudo \
       docker-ce docker-ce-cli containerd.io unzip 7zip texlive-full latexmk chktex \
+      # Network utilities for debugging
+      iputils-ping netcat-openbsd net-tools dnsutils traceroute tcpdump nmap \
+      iproute2 iptables curl wget telnet mtr-tiny \
       # Additional Blender dependencies for headless operation (COMMENTED OUT)
       # libgl1 libglu1-mesa libglib2.0-0 libsm6 libxext6 \
       # libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 \
@@ -51,6 +54,7 @@ RUN apt-get update && \
       python3.12 python3.12-venv python3.12-dev \
       python3.13 python3.13-venv python3.13-dev \
       nodejs \
+      jq \
       libvulkan1 vulkan-tools ocl-icd-libopencl1 && \
     rm -rf /var/lib/apt/lists/* && \
     # Linters
@@ -93,8 +97,13 @@ RUN python3.12 -m venv /opt/venv312 && \
     python3.13 -m venv /opt/venv313 && \
     /opt/venv313/bin/pip install --upgrade pip wheel setuptools
 
-# ---------- Install global CLI tools with claude-flow@alpha as primary ----------
-RUN npm install -g claude-flow@alpha ruv-swarm @anthropic-ai/claude-code @google/gemini-cli @openai/codex
+# ---------- Install global CLI tools with specific versions ----------
+RUN npm install -g \
+    claude-flow@alpha \
+    ruv-swarm@latest \
+    @anthropic-ai/claude-code@latest \
+    @google/gemini-cli@latest \
+    @openai/codex@latest
 
 # ---------- Install Python ML & AI libraries into the 3.12 venv ----------
 # Copy requirements file and install dependencies to leverage Docker layer caching.
@@ -120,8 +129,9 @@ RUN apt-get update && \
     cargo install cargo-edit
 ENV RUSTFLAGS="-C target-cpu=skylake-avx512 -C target-feature=+avx2,+avx512f,+avx512bw,+avx512dq"
 
-# ---------- Install uv (fast python package manager) ----------
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+# ---------- Install uv (fast python package manager) and uvx ----------
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    echo 'export PATH="/root/.local/bin:$PATH"' >> /etc/profile.d/uv.sh
 
 # ---------- GPU‑accelerated Wasm stack (WasmEdge) ----------
 RUN curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install.sh | \
@@ -153,8 +163,12 @@ RUN (id ubuntu &>/dev/null && userdel -r ubuntu) || true && \
     # Create python symlink for convenience
     ln -s /usr/bin/python3.12 /usr/local/bin/python && \
     # Create workspace directories with proper ownership
-    mkdir -p /workspace /workspace/ext /workspace/logs && \
-    chown -R dev:dev /workspace
+    mkdir -p /workspace /workspace/ext /workspace/logs /workspace/.claude /workspace/.mcp /workspace/memory && \
+    chown -R dev:dev /workspace && \
+    # Make uv accessible to dev user
+    cp -r /root/.local /home/dev/ && \
+    chown -R dev:dev /home/dev/.local && \
+    echo 'export PATH="/home/dev/.local/bin:$PATH"' >> /home/dev/.bashrc
 
 
 USER dev
@@ -167,13 +181,13 @@ RUN git config --global user.email "swarm@dreamlab-ai.com" && \
     git config --global user.name "Swarm Agent"
 
 # Activate 3.12 venv by default
-ENV PATH="/opt/venv312/bin:${PATH}"
+ENV PATH="/opt/venv312/bin:/home/dev/.local/bin:${PATH}"
 
 # Runtime placeholders
 ENV WASMEDGE_PLUGIN_PATH="/usr/local/lib/wasmedge"
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-  CMD ["sh", "-c", "command -v max >/dev/null"] || exit 1
+  CMD ["sh", "-c", "command -v claude >/dev/null && command -v claude-flow >/dev/null"] || exit 1
 
 # Start via entrypoint.sh which handles all services including Blender MCP
 ENTRYPOINT ["/entrypoint.sh"]

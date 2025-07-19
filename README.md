@@ -10,12 +10,13 @@ This repository provides a fully containerized, high-performance development env
 
 - **`claude-flow@alpha` Ready**: The environment is built around `claude-flow` as the primary orchestration and development tool.
 - **`ruv-swarm` Integration**: Multi-agent orchestration system running alongside claude-flow.
+- **Full MCP Support**: Integrated MCP servers for Claude Flow, Ruv Swarm, and Blender with automatic initialization.
 - **Comprehensive AI/ML Stack**: Includes Python 3.12/3.13 with TensorFlow, PyTorch, Keras, and more, all accelerated by CUDA 12.9.
 - **GPU Accelerated**: Full NVIDIA GPU support (`--gpus all`) is enabled out-of-the-box for both ML tasks and WebGPU/Wasm workloads.
 - **Robust Security Model**: The container runs with a hardened security profile, dropping all default capabilities and only adding back what is essential for development and debugging.
 - **Persistent Data Storage**: Your workspace, data, logs, and outputs are safely persisted on the host machine in the `.agent-mount` directory.
-- **Helper Script**: The `powerdev.sh` script simplifies all common Docker operations like building, running, and managing the container.
-- **Remote MCP Connectivity**: Connect to external Blender, Revit, and other MCP servers while maintaining local development capabilities.
+- **Enhanced CLI**: The `powerdev.sh` script now includes MCP management commands for easier server control.
+- **Remote MCP Connectivity**: Connect to external Blender, Revit, and other MCP servers with built-in network bridging.
 
 ## 🏗️ Architecture Overview
 
@@ -143,6 +144,51 @@ graph TD
 
 5. **Access the UI**:
    Open your browser and navigate to **[http://localhost:3000](http://localhost:3000)** to access the `claude-flow` web interface.
+
+## 🤖 MCP Server Setup
+
+The environment includes full MCP (Model Context Protocol) support with automatic initialization:
+
+### Included MCP Servers
+
+1. **Claude Flow** - Swarm orchestration and coordination
+2. **Ruv Swarm** - Advanced agent management and neural features
+3. **Blender MCP** - 3D modeling via remote TCP connection
+
+### MCP Commands
+
+```bash
+# Check MCP server status
+./powerdev.sh mcp status
+
+# Initialize/reinstall MCP servers
+./powerdev.sh mcp init
+
+# Test Blender connection
+./powerdev.sh mcp test-blender
+
+# View MCP logs
+./powerdev.sh mcp logs
+```
+
+### Blender MCP Configuration
+
+To connect to a remote Blender instance:
+
+1. Set environment variables in `.env`:
+   ```bash
+   BLENDER_HOST=192.168.0.216
+   BLENDER_PORT=9876
+   ```
+
+2. Ensure Blender is running with the MCP addon enabled
+
+3. Test the connection:
+   ```bash
+   ./powerdev.sh mcp test-blender
+   ```
+
+For detailed MCP setup instructions, see [MCP_SETUP_GUIDE.md](./MCP_SETUP_GUIDE.md).
 
 ## 🧰 The `powerdev.sh` Helper Script
 
