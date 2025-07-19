@@ -6,7 +6,7 @@ services:
       args:
         - BLENDER_DOWNLOAD_URL=https://mirror.clarkson.edu/blender/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz
     image: powerdev:latest
-    container_name: powerdev-container
+    container_name: powerdev
 
     # GPU support (uncomment if you have NVIDIA GPU)
     deploy:
