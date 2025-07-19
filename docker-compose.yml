@@ -1,12 +1,12 @@
 services:
-  blender-dev:
+  powerdev:
     build:
       context: .
       dockerfile: Dockerfile
       args:
         - BLENDER_DOWNLOAD_URL=https://mirror.clarkson.edu/blender/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz
-    image: blender-mcp-dev:latest
-    container_name: blender-mcp-container
+    image: powerdev:latest
+    container_name: powerdev-container
 
     # GPU support (uncomment if you have NVIDIA GPU)
     deploy:
@@ -53,7 +53,7 @@ services:
 
     # Healthcheck
     healthcheck:
-      test: ["CMD", "pgrep", "-f", "blender"]
+      test: ["CMD", "pgrep", "-f", "python"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -63,11 +63,11 @@ services:
     restart: unless-stopped
 
     networks:
-      - blender-net
+      - docker_ragflow
 
   # Optional: Claude Flow standalone service
   claude-flow:
-    image: blender-mcp-dev:latest
+    image: powerdev:latest
     container_name: claude-flow-ui
     command: ["claude-flow", "start", "--ui", "--port", "3000"]
     ports:
@@ -75,16 +75,13 @@ services:
     environment:
       - NODE_ENV=production
     networks:
-      - blender-net
+      - docker_ragflow
     profiles:
       - standalone
 
 networks:
-  blender-net:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
+  docker_ragflow:
+    external: true
 
 volumes:
   workspace:

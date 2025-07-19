@@ -1,2 +1,3 @@
 .env
-revit-mcp
+workspace
+mcp-logs

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# powerdev-enhanced.sh - helper for the enhanced MCP orchestration development environment
+# powerdev.sh - helper for the powerdev development environment
 set -euo pipefail
 
 # Configuration
@@ -113,9 +113,9 @@ validate_config() {
 # ---- Help message ---------------------
 help() {
   cat <<EOF
-Usage: $0 {build|start|stop|restart|status|logs|shell|health|monitor|tools|cleanup}
+Usage: $0 {build|start|stop|restart|status|logs|shell|health|monitor|tools|cleanup|rm}
 
-Enhanced MCP Orchestration Commands:
+PowerDev Commands:
 
   build [--no-cache]   Build all Docker images:
                        $0 build
@@ -160,6 +160,9 @@ Enhanced MCP Orchestration Commands:
   cleanup              Clean up all containers and volumes:
                        $0 cleanup
 
+  rm                   Remove orphan containers:
+                       $0 rm
+
 Service URLs:
   - Claude Flow UI: http://localhost:3000
   - MCP Orchestrator API: http://localhost:9000
@@ -178,7 +181,7 @@ build() {
   preflight
   detect_resources
 
-  echo "Building enhanced powerdev images..."
+  echo "Building powerdev images..."
 
   # Build with docker-compose
   docker-compose -f "$COMPOSE_FILE" build "${@:2}"
@@ -198,7 +201,7 @@ start() {
     profiles="$profiles --profile $arg"
   done
 
-  echo "Starting enhanced powerdev services..."
+  echo "Starting powerdev services..."
   docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" $profiles up -d
 
   echo ""
@@ -217,6 +220,9 @@ start() {
   if [[ "$*" == *"monitoring"* ]]; then
     echo "  - Grafana: http://localhost:3002 (admin/admin)"
   fi
+
+  # Automatically enter the main container shell
+  shell main
 }
 
 # ---- Stop command ---------------------
@@ -264,7 +270,7 @@ logs() {
   else
     # Map friendly names
     case $service in
-      main) service="powerdev-main" ;;
+      main) service="powerdev" ;;
       orchestrator) service="mcp-orchestrator" ;;
       tools) service="mcp-tools" ;;
     esac
@@ -279,7 +285,7 @@ shell() {
 
   # Map friendly names to service names
   case $service in
-    main) service="powerdev-main" ;;
+    main) service="powerdev" ;;
     orchestrator) service="mcp-orchestrator" ;;
     tools) service="mcp-tools" ;;
   esac
@@ -300,7 +306,7 @@ health() {
     echo "Running basic health check..."
 
     # Basic health check
-    if docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" exec powerdev-main /app/mcp-scripts/health-check.sh; then
+    if docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" exec powerdev /app/mcp-scripts/health-check.sh; then
       echo "✓ Basic health check passed"
     else
       echo "✗ Basic health check failed"
@@ -366,6 +372,13 @@ tools() {
   esac
 }
 
+# ---- Remove orphan containers command ---------------------
+rm_orphans() {
+  echo "Removing orphan containers..."
+  docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" down --remove-orphans
+  echo "Orphan containers removed."
+}
+
 # ---- Cleanup command ---------------------
 cleanup() {
   echo "This will remove all containers and volumes. Are you sure? (y/N)"
@@ -386,7 +399,7 @@ cleanup() {
 }
 
 # ---- Shell completion ---------------------
-_powerdev_enhanced_completion() {
+_powerdev_completion() {
   local cur="${COMP_WORDS[COMP_CWORD]}"
   local prev="${COMP_WORDS[COMP_CWORD-1]}"
 
@@ -406,7 +419,7 @@ _powerdev_enhanced_completion() {
       ;;
   esac
 }
-complete -F _powerdev_enhanced_completion powerdev-enhanced.sh
+complete -F _powerdev_completion powerdev.sh
 
 # ---- Graceful shutdown handler ---------------------
 trap 'echo "Shutting down..."; stop 2>/dev/null; exit' SIGINT SIGTERM
@@ -418,8 +431,15 @@ if [[ $# -eq 0 ]]; then
 fi
 
 case $1 in
-  build|start|stop|restart|status|logs|shell|health|monitor|tools|cleanup)
-    "$@"
+  build|start|stop|restart|status|logs|shell|health|monitor|tools|cleanup|rm)
+    case $1 in
+      rm)
+        rm_orphans
+        ;;
+      *)
+        "$@"
+        ;;
+    esac
     ;;
   *)
     help

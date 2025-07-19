@@ -2,15 +2,15 @@
 FROM nvidia/cuda:12.9.0-cudnn-devel-ubuntu24.04 AS base
 
 ################################################################################
-# Stage 1 – OS deps, Python 3.12 & 3.13 venvs, Rust, Node, ML stack, WasmEdge, Blender
+# Stage 1 – OS deps, Python 3.12 & 3.13 venvs, Rust, Node, ML stack, WasmEdge (Blender disabled)
 ################################################################################
 ARG DEBIAN_FRONTEND=noninteractive
 
-# 1. Set Environment Variables for Blender
+# 1. Set Environment Variables for Blender (COMMENTED OUT - Blender disabled)
 # Set the Blender version and create a directory for it.
-ARG BLENDER_DOWNLOAD_URL
-ENV BLENDER_VERSION="4.5"
-ENV BLENDER_PATH="/usr/local/blender"
+# ARG BLENDER_DOWNLOAD_URL
+# ENV BLENDER_VERSION="4.5"
+# ENV BLENDER_PATH="/usr/local/blender"
 
 # Set the application workspace directory
 ENV APP_HOME="/app"
@@ -42,11 +42,11 @@ RUN apt-get update && \
       build-essential clang git pkg-config libssl-dev \
       lsb-release shellcheck hyperfine openssh-client tmux sudo \
       docker-ce docker-ce-cli containerd.io unzip 7zip texlive-full latexmk chktex \
-      # Additional Blender dependencies for headless operation
-      libgl1 libglu1-mesa libglib2.0-0 libsm6 libxext6 \
-      libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 \
-      # X11 virtual framebuffer for headless rendering
-      xvfb \
+      # Additional Blender dependencies for headless operation (COMMENTED OUT)
+      # libgl1 libglu1-mesa libglib2.0-0 libsm6 libxext6 \
+      # libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 \
+      # X11 virtual framebuffer for headless rendering (COMMENTED OUT)
+      # xvfb \
       # Python, Node, and GPU/Wasm dependencies
       python3.12 python3.12-venv python3.12-dev \
       python3.13 python3.13-venv python3.13-dev \
@@ -60,28 +60,28 @@ RUN apt-get update && \
 # 3. Install Blender
 # Download and extract the specified Blender LTS version.
 # Use default URL if not provided
-RUN BLENDER_URL=${BLENDER_DOWNLOAD_URL:-"https://mirror.clarkson.edu/blender/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz"} && \
-    wget "${BLENDER_URL}" -O blender.tar.xz && \
-    tar -xf blender.tar.xz && \
-    mv blender-${BLENDER_VERSION}.0-linux-x64 ${BLENDER_PATH} && \
-    rm blender.tar.xz
+# RUN BLENDER_URL=${BLENDER_DOWNLOAD_URL:-"https://mirror.clarkson.edu/blender/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz"} && \
+#     wget "${BLENDER_URL}" -O blender.tar.xz && \
+#     tar -xf blender.tar.xz && \
+#     mv blender-${BLENDER_VERSION}.0-linux-x64 ${BLENDER_PATH} && \
+#     rm blender.tar.xz
 
-# 4. Create addon directory and copy files later
+# 4. Create addon directory and copy files later (COMMENTED OUT - Blender disabled)
 # We'll copy the addon files after creating the proper directory structure
-RUN mkdir -p ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/addon
+# RUN mkdir -p ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/addon
 
-# 5. Install the MCP Server Package Dependencies
+# 5. Install the MCP Server Package Dependencies (COMMENTED OUT - Blender disabled)
 # Install dependencies for the addon using Blender's Python
-RUN /usr/local/blender/4.5/python/bin/python3.11 -m ensurepip && \
-    /usr/local/blender/4.5/python/bin/python3.11 -m pip install --upgrade pip && \
-    /usr/local/blender/4.5/python/bin/python3.11 -m pip install Pillow
+# RUN /usr/local/blender/4.5/python/bin/python3.11 -m ensurepip && \
+#     /usr/local/blender/4.5/python/bin/python3.11 -m pip install --upgrade pip && \
+#     /usr/local/blender/4.5/python/bin/python3.11 -m pip install Pillow
 
 # 6. Set PYTHONPATH for Blender integration
 ENV PYTHONPATH="${APP_HOME}"
 
-# 7. Copy startup and addon files
-# Note: These files will be copied from the build context
-COPY addon.py ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/addon/__init__.py
+# 7. Copy startup and addon files (MCP server files for remote Blender connection)
+# Note: addon.py is used as MCP server to connect to remote Blender, not as local addon
+COPY addon.py $APP_HOME/
 COPY keep_alive.py $APP_HOME/
 COPY entrypoint.sh /
 COPY entrypoint.sh /
