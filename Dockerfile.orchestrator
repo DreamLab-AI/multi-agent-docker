@@ -1,0 +1,41 @@
+# MCP Orchestrator Service
+# Manages MCP servers and provides WebSocket API for real-time visualization
+FROM node:22-alpine
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apk add --no-cache \
+    curl \
+    jq \
+    netcat-openbsd \
+    python3 \
+    py3-pip \
+    bash
+
+# Copy package files
+COPY orchestrator/package*.json ./
+
+# Install Node dependencies
+RUN npm ci --only=production
+
+# Copy orchestrator source code
+COPY orchestrator/ ./
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/data /app/agent-data
+
+# Health check script
+RUN echo '#!/bin/sh\ncurl -f http://localhost:9000/health || exit 1' > /usr/local/bin/health-check && \
+    chmod +x /usr/local/bin/health-check
+
+# Non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 && \
+    chown -R nodejs:nodejs /app
+
+USER nodejs
+
+EXPOSE 9000 9001
+
+CMD ["node", "server.js"]
