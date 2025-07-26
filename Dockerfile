@@ -50,6 +50,7 @@ RUN apt-get update && \
       # libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 \
       # X11 virtual framebuffer for headless rendering
       xvfb \
+      supervisor \
       # Python, Node, and GPU/Wasm dependencies
       python3.12 python3.12-venv python3.12-dev \
       python3.13 python3.13-venv python3.13-dev \
@@ -88,7 +89,7 @@ ENV PYTHONPATH="${APP_HOME}"
 COPY addon.py $APP_HOME/
 COPY keep_alive.py $APP_HOME/
 COPY entrypoint.sh /
-COPY entrypoint.sh /
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 RUN chmod +x /entrypoint.sh
 
 # ---------- Create Python virtual environments & install global node packages ----------

@@ -429,7 +429,7 @@ Use the built-in testing tools:
 | Port | Service | Description |
 |------|---------|-------------|
 | 3000 | Claude Flow UI | Main web interface |
-| 3001 | Additional Services | Reserved for future services |
+| 3005 | Additional Services | Reserved for future services |
 | 9876 | Blender MCP (External) | Remote Blender MCP server |
 | 8080 | Revit MCP (External) | Remote Revit MCP server |
 | 55557 | Unreal MCP (External) | Remote Unreal MCP server |

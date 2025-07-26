@@ -19,8 +19,8 @@ detect_resources() {
   AVAILABLE_MEM=$(free -g | awk '/^Mem:/{print $2}')
 
   # Set sensible defaults based on available resources
-  DEFAULT_CPUS=$((AVAILABLE_CPUS > 24 ? 24 : AVAILABLE_CPUS))
-  DEFAULT_MEM=$((AVAILABLE_MEM > 200 ? 200 : AVAILABLE_MEM > 10 ? AVAILABLE_MEM-10 : 4))
+  DEFAULT_CPUS=$AVAILABLE_CPUS
+  DEFAULT_MEM=$((AVAILABLE_MEM - 2)) # Leave 2GB for the host OS
 
   # Apply user overrides or use calculated defaults
   DOCKER_CPUS=${DOCKER_CPUS:-$DEFAULT_CPUS}
@@ -70,6 +70,9 @@ preflight() {
   chmod -R 755 "./.agent-mount/"
 
   echo "Created persistent directories"
+
+  # Detect resources before creating .env
+  detect_resources
 
   # Create .env file if it doesn't exist
   if [[ ! -f "$ENVFILE" ]]; then
@@ -185,7 +188,6 @@ EOF
 # ---- Build command ---------------------
 build() {
   preflight
-  detect_resources
 
   echo "Building powerdev images..."
 
@@ -198,7 +200,6 @@ build() {
 # ---- Start command ---------------------
 start() {
   preflight
-  detect_resources
 
   local profiles=""
 
@@ -208,7 +209,7 @@ start() {
   done
 
   echo "Starting powerdev services..."
-  docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" $profiles up -d
+  docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" $profiles up -d powerdev
 
   echo ""
   echo "Services started! Waiting for health checks..."
@@ -430,7 +431,7 @@ complete -F _powerdev_completion powerdev.sh
 # ---- MCP commands ---------------------
 mcp() {
   local action="${2:-status}"
-  
+
   case $action in
     status)
       echo "Checking MCP server status..."

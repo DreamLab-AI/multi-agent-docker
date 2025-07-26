@@ -1,3 +1,4 @@
 .env
 workspace
 mcp-logs
+.venv/
