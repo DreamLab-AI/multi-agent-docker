@@ -171,7 +171,7 @@ RUN (id ubuntu &>/dev/null && userdel -r ubuntu) || true && \
     # Create python symlink for convenience
     ln -s /usr/bin/python3.12 /usr/local/bin/python && \
     # Create workspace directories with proper ownership
-    mkdir -p /workspace /workspace/ext /workspace/logs /workspace/.claude /workspace/.mcp /workspace/memory && \
+    mkdir -p /workspace /workspace/ext/src /workspace/logs /workspace/.claude /workspace/.mcp /workspace/memory && \
     chown -R dev:dev /workspace && \
     # Make uv accessible to dev user
     cp -r /root/.local /home/dev/ && \
@@ -184,6 +184,7 @@ RUN (id ubuntu &>/dev/null && userdel -r ubuntu) || true && \
 
 USER dev
 WORKDIR /workspace
+COPY --chown=dev:dev mcp-ws-relay.js /workspace/ext/src/
 COPY README.md .
 COPY CLAUDE-README.md .
 
