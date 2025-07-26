@@ -35,7 +35,8 @@ sleep 2
 # Initialize Claude Flow and Ruv Swarm
 echo "--- Initializing Claude Flow and Ruv Swarm ---"
 if [ ! -f "/home/dev/.claude-flow-initialized" ]; then
-    npx claude-flow@alpha init --force --hive-mind --neural-enhanced  mcp setup --auto-permissions --87-tools || true
+    npx claude-flow@alpha init --force --hive-mind --neural-enhanced || true
+    npx claude-flow@alpha mcp setup --auto-permissions --87-tools || true
     touch /home/dev/.claude-flow-initialized
 fi
 

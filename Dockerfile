@@ -2,15 +2,15 @@
 FROM nvidia/cuda:12.9.0-cudnn-devel-ubuntu24.04 AS base
 
 ################################################################################
-# Stage 1 – OS deps, Python 3.12 & 3.13 venvs, Rust, Node, ML stack, WasmEdge (Blender disabled)
+# Stage 1 – OS deps, Python 3.12 & 3.13 venvs, Rust, Node, ML stack, WasmEdge, Blender
 ################################################################################
 ARG DEBIAN_FRONTEND=noninteractive
 
-# 1. Set Environment Variables for Blender (COMMENTED OUT - Blender disabled)
+# 1. Set Environment Variables for Blender
 # Set the Blender version and create a directory for it.
-# ARG BLENDER_DOWNLOAD_URL
-# ENV BLENDER_VERSION="4.5"
-# ENV BLENDER_PATH="/usr/local/blender"
+ARG BLENDER_DOWNLOAD_URL
+ENV BLENDER_VERSION="4.5"
+ENV BLENDER_PATH="/usr/local/blender"
 
 # Set the application workspace directory
 ENV APP_HOME="/app"
@@ -45,9 +45,11 @@ RUN apt-get update && \
       # Network utilities for debugging
       iputils-ping netcat-openbsd net-tools dnsutils traceroute tcpdump nmap \
       iproute2 iptables curl wget telnet mtr-tiny \
-      # Additional Blender dependencies for headless operation (COMMENTED OUT)
-      # libgl1 libglu1-mesa libglib2.0-0 libsm6 libxext6 \
-      # libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 \
+      # SQLite dependencies for claude-flow
+      sqlite3 libsqlite3-dev \
+      # Additional Blender dependencies for headless operation
+      libgl1 libglu1-mesa libglib2.0-0 libsm6 libxext6 \
+      libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 \
       # X11 virtual framebuffer for headless rendering
       xvfb \
       supervisor \
@@ -65,27 +67,28 @@ RUN apt-get update && \
 # 3. Install Blender
 # Download and extract the specified Blender LTS version.
 # Use default URL if not provided
-# RUN BLENDER_URL=${BLENDER_DOWNLOAD_URL:-"https://mirror.clarkson.edu/blender/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz"} && \
-#     wget "${BLENDER_URL}" -O blender.tar.xz && \
-#     tar -xf blender.tar.xz && \
-#     mv blender-${BLENDER_VERSION}.0-linux-x64 ${BLENDER_PATH} && \
-#     rm blender.tar.xz
+RUN BLENDER_URL=${BLENDER_DOWNLOAD_URL:-"https://download.blender.org/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz"} && \
+    wget "${BLENDER_URL}" -O blender.tar.xz && \
+    tar -xf blender.tar.xz && \
+    mv blender-${BLENDER_VERSION}.0-linux-x64 ${BLENDER_PATH} && \
+    rm blender.tar.xz
 
-# 4. Create addon directory and copy files later (COMMENTED OUT - Blender disabled)
+# 4. Create addon directory and copy files later
 # We'll copy the addon files after creating the proper directory structure
-# RUN mkdir -p ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/addon
+RUN mkdir -p ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/addon
 
-# 5. Install the MCP Server Package Dependencies (COMMENTED OUT - Blender disabled)
+# 5. Install the MCP Server Package Dependencies
 # Install dependencies for the addon using Blender's Python
-# RUN /usr/local/blender/4.5/python/bin/python3.11 -m ensurepip && \
-#     /usr/local/blender/4.5/python/bin/python3.11 -m pip install --upgrade pip && \
-#     /usr/local/blender/4.5/python/bin/python3.11 -m pip install Pillow
+RUN ${BLENDER_PATH}/${BLENDER_VERSION}/python/bin/python3.11 -m ensurepip && \
+    ${BLENDER_PATH}/${BLENDER_VERSION}/python/bin/python3.11 -m pip install --upgrade pip && \
+    ${BLENDER_PATH}/${BLENDER_VERSION}/python/bin/python3.11 -m pip install Pillow
 
 # 6. Set PYTHONPATH for Blender integration
 ENV PYTHONPATH="${APP_HOME}"
 
-# 7. Copy startup and addon files (MCP server files for remote Blender connection)
-# Note: addon.py is used as MCP server to connect to remote Blender, not as local addon
+# 7. Copy startup and addon files
+# Copy addon.py to both local Blender installation and app directory for flexibility
+COPY addon.py ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/addon/__init__.py
 COPY addon.py $APP_HOME/
 COPY keep_alive.py $APP_HOME/
 COPY entrypoint.sh /
@@ -104,7 +107,8 @@ RUN npm install -g \
     ruv-swarm@latest \
     @anthropic-ai/claude-code@latest \
     @google/gemini-cli@latest \
-    @openai/codex@latest
+    @openai/codex@latest && \
+    npm install -g sqlite3 --unsafe-perm
 
 # ---------- Install Python ML & AI libraries into the 3.12 venv ----------
 # Copy requirements file and install dependencies to leverage Docker layer caching.
@@ -161,6 +165,9 @@ RUN (id ubuntu &>/dev/null && userdel -r ubuntu) || true && \
     echo "dev ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev && chmod 0440 /etc/sudoers.d/dev && \
     # Fix ownership of npm global modules so dev user can write to them
     chown -R dev:dev /usr/lib/node_modules && \
+    # Create npm global directory for dev user and configure npm
+    mkdir -p /home/dev/.npm-global && \
+    chown -R dev:dev /home/dev/.npm-global && \
     # Create python symlink for convenience
     ln -s /usr/bin/python3.12 /usr/local/bin/python && \
     # Create workspace directories with proper ownership
@@ -169,7 +176,10 @@ RUN (id ubuntu &>/dev/null && userdel -r ubuntu) || true && \
     # Make uv accessible to dev user
     cp -r /root/.local /home/dev/ && \
     chown -R dev:dev /home/dev/.local && \
-    echo 'export PATH="/home/dev/.local/bin:$PATH"' >> /home/dev/.bashrc
+    echo 'export PATH="/home/dev/.local/bin:$PATH"' >> /home/dev/.bashrc && \
+    # Configure npm for global installs without sudo
+    echo 'export NPM_CONFIG_PREFIX="/home/dev/.npm-global"' >> /home/dev/.bashrc && \
+    echo 'export PATH="/home/dev/.npm-global/bin:$PATH"' >> /home/dev/.bashrc
 
 
 USER dev

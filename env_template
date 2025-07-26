@@ -21,8 +21,10 @@ WASMEDGE_PLUGIN_PATH="/usr/local/lib/wasmedge"
 DOCKER_CPUS=
 DOCKER_MEMORY=
 
-# blender download link
-BLENDER_DOWNLOAD_URL="https://cdn.builder.blender.org/download/daily/blender-5.0.0-alpha+main.1a247fbaa8bc-linux.x86_64-release.tar.xz"
+# Blender Configuration
+BLENDER_MODE="local"  # Options: "local" for internal headless, "remote" for external MCP server
+BLENDER_DOWNLOAD_URL="https://download.blender.org/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz"
 
-# Remote MCP Server IP
+# Remote MCP Server Configuration (used when BLENDER_MODE="remote")
 REMOTE_MCP_HOST=
+REMOTE_BLENDER_PORT=9876
