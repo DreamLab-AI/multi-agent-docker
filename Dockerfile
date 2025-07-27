@@ -33,7 +33,7 @@ RUN echo \
       tee /etc/apt/sources.list.d/docker.list > /dev/null
 # Add Deadsnakes PPA for newer Python versions
 RUN add-apt-repository -y ppa:deadsnakes/ppa && \
-    add-apt-repository -y ppa:kicad/kicad-8.0-releases
+    add-apt-repository -y ppa:kicad/kicad-9.0-releases
 # Add NodeSource repository for up-to-date NodeJS (v22+)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 # Install all packages including network utilities
@@ -126,9 +126,9 @@ RUN git clone https://github.com/jjohare/tessellating-pbr-generator.git /opt/tes
     /opt/venv312/bin/pip install --no-cache-dir -r /opt/tessellating-pbr-generator/requirements.txt
 
 # ---------- EDA & CIRCUIT DESIGN TOOLING ADDITIONS ----------
-# Install snapd for KiCad installation
+# Install KiCad from PPA (version 9.0)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends snapd && \
+    apt-get install -y --no-install-recommends kicad && \
     rm -rf /var/lib/apt/lists/*
 
 # ---------- Install OSS CAD Suite for comprehensive EDA tools ----------
@@ -137,20 +137,6 @@ RUN wget https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2024-0
     mkdir -p /opt/oss-cad-suite && \
     tar -xzf oss-cad-suite.tgz -C /opt/oss-cad-suite --strip-components=1 && \
     rm oss-cad-suite.tgz
-
-# ---------- Install KiCad via AppImage (more reliable than apt) ----------
-RUN wget https://downloads.kicad.org/kicad/8.0.7/kicad-8.0.7-x86_64.AppImage -O /opt/kicad.AppImage && \
-    chmod +x /opt/kicad.AppImage && \
-    # Create wrapper script for KiCad
-    echo '#!/bin/bash' > /usr/local/bin/kicad && \
-    echo 'exec /opt/kicad.AppImage "$@"' >> /usr/local/bin/kicad && \
-    chmod +x /usr/local/bin/kicad
-
-# ---------- Install KiCad MCP Server ----------
-RUN git clone https://github.com/lamaalrajih/kicad-mcp.git /opt/kicad-mcp && \
-    cd /opt/kicad-mcp && \
-    /opt/venv312/bin/pip install -r requirements.txt && \
-    chmod +x /opt/kicad-mcp/src/kicad_mcp_server.py
 
 # ---------- Additional EDA Tools for AI Circuit Design ----------
 # Install more comprehensive circuit design tools
