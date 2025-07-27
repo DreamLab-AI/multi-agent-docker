@@ -10,13 +10,20 @@ This repository provides a fully containerized, high-performance development env
 
 - **`claude-flow@alpha` Ready**: The environment is built around `claude-flow` as the primary orchestration and development tool.
 - **`ruv-swarm` Integration**: Multi-agent orchestration system running alongside claude-flow.
-- **Full MCP Support**: Integrated MCP servers for Claude Flow, Ruv Swarm, and Blender with automatic initialization.
+- **Full MCP Support**: A suite of internal MCP tools for 2D/3D content creation, PBR texture generation, and Electronic Design Automation (EDA).
 - **Comprehensive AI/ML Stack**: Includes Python 3.12/3.13 with TensorFlow, PyTorch, Keras, and more, all accelerated by CUDA 12.9.
+- **PBR Texture Generation**: Integrated `tessellating-pbr-generator` for creating high-quality, seamless PBR materials.
+- **2D/3D CLI Toolchain**: Includes ImageMagick, Inkscape, FFmpeg, and Meshroom for powerful content creation and processing workflows.
+- **EDA Toolchain**: A complete open-source Electronic Design Automation suite, including NGSpice, KiCad, Icarus Verilog, Yosys, and nextpnr for circuit design, simulation, and verification.
 - **GPU Accelerated**: Full NVIDIA GPU support (`--gpus all`) is enabled out-of-the-box for both ML tasks and WebGPU/Wasm workloads.
 - **Robust Security Model**: The container runs with a hardened security profile, dropping all default capabilities and only adding back what is essential for development and debugging.
 - **Persistent Data Storage**: Your workspace, data, logs, and outputs are safely persisted on the host machine in the `.agent-mount` directory.
 - **Enhanced CLI**: The `powerdev.sh` script now includes MCP management commands for easier server control.
 - **Remote MCP Connectivity**: Connect to external Blender, Revit, and other MCP servers with built-in network bridging.
+- **Internal MCP Tools**: A suite of built-in MCP tools are managed by `supervisor` and run automatically inside the container. These include:
+  - `imagemagick-mcp`: Exposes ImageMagick's powerful image processing capabilities.
+  - `pbr-generator-mcp`: Provides access to the `tessellating-pbr-generator` for creating PBR materials.
+  - `ngspice-mcp`: Allows for SPICE simulation of electronic circuits using NGSpice.
 
 ## 🏗️ Architecture Overview
 
@@ -229,7 +236,10 @@ This script is your main entry point for managing the environment.
 | **Node.js 22 LTS**| `claude-flow@alpha`, `ruv-swarm`, global CLI tools for development.                                                                                                                            |
 | **Wasm / WebGPU** | WasmEdge (+WASI-NN OpenVINO), OpenVINO 2025 runtime, Vulkan/OpenCL loaders.                                                                                                    |
 | **System & Linters**| `git`, `tmux`, `shellcheck`, `hadolint`, `hyperfine`, `docker-ce` (for DinD), `uv`.                                                                                                       |
-| **MCP Integration**   | Remote connectivity to Blender, Revit, and other MCP servers via network protocols.                                                                                       |
+| **PBR Texture Generation** | `tessellating-pbr-generator`: AI-driven PBR material generation.                                                                                                     |
+| **2D/3D CLI Tools** | `ImageMagick`, `Inkscape`, `FFmpeg`, `Meshroom`: A full suite for image, vector, and video processing, plus photogrammetry.                                                              |
+| **EDA Toolchain**   | `NGSpice`, `KiCad`, `Icarus Verilog`, `Yosys`, `nextpnr`: A complete flow for analog and digital circuit design, from simulation to PCB layout and FPGA synthesis. |
+| **MCP Integration**   | A suite of internal MCP tools exposing the above capabilities, plus remote connectivity to external servers like Blender and Revit.                                       |
 
 ### Security Model
 
@@ -249,6 +259,7 @@ Your work is never lost when the container stops. All important data is mounted 
 .
 ├── workspace/            # Main workspace directory (mounted in container)
 ├── blender-files/        # Blender-related files for MCP integration
+├── pbr_outputs/          # Default output directory for the PBR generator
 ├── mcp-logs/            # MCP service logs
 ├── mcp-configs/         # MCP configuration files
 ├── docker-compose.yml   # Service orchestration

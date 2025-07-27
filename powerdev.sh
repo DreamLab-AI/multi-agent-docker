@@ -174,8 +174,7 @@ PowerDev Commands:
 
 Service URLs:
   - Claude Flow UI: http://localhost:3000
-  - MCP Orchestrator API: http://localhost:9000
-  - MCP WebSocket: ws://localhost:9001
+  - MCP WebSocket: ws://localhost:3002
   - Grafana: http://localhost:3002 (when monitoring profile is active)
 
 Available Profiles:
@@ -221,8 +220,7 @@ start() {
   echo ""
   echo "Access points:"
   echo "  - Claude Flow UI: http://localhost:3000"
-  echo "  - MCP Orchestrator API: http://localhost:9000"
-  echo "  - MCP WebSocket: ws://localhost:9001"
+  echo "  - MCP WebSocket: ws://localhost:3002"
 
   if [[ "$*" == *"monitoring"* ]]; then
     echo "  - Grafana: http://localhost:3002 (admin/admin)"
@@ -257,14 +255,6 @@ status() {
   docker ps --filter "label=com.docker.compose.project=$PROJECT_NAME" \
             --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
-  # Check orchestrator health
-  echo ""
-  echo "Orchestrator Health:"
-  if curl -s http://localhost:9000/health | jq . 2>/dev/null; then
-    echo "✓ Orchestrator is healthy"
-  else
-    echo "✗ Orchestrator is not responding"
-  fi
 }
 
 # ---- Logs command ---------------------
@@ -366,8 +356,7 @@ tools() {
       if [[ -x "./mcp-scripts/mcp-manager.sh" ]]; then
         ./mcp-scripts/mcp-manager.sh test-api
       else
-        echo "Running basic API test..."
-        curl -s http://localhost:9000/health | jq .
+        echo "No basic API test available."
       fi
       ;;
 

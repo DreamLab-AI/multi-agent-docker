@@ -1,19 +1,28 @@
-# MCP Visualization API Documentation
+# MCP Services Documentation
 
-This document describes the API endpoints and WebSocket interface provided by the MCP Orchestrator service for real-time agent swarm visualization.
+This document describes the MCP (Model Context Protocol) services available in the PowerDev environment.
 
 ## Overview
 
-The MCP Orchestrator provides two main interfaces:
-1. **REST API** (Port 9000) - For synchronous requests and configuration
-2. **WebSocket API** (Port 9001) - For real-time data streaming
+The PowerDev environment includes a suite of internal MCP tools that are managed by `supervisord`. These tools provide access to a wide range of capabilities, from content creation to electronic design automation. A simple WebSocket relay on port 3002 is provided for agents to connect to these services.
 
-## WebSocket API (ws://localhost:9001)
+## Available MCP Tools
 
-### Connection
+The following MCP tools are started automatically by `supervisord`:
+
+- **`imagemagick-mcp`**: Exposes [ImageMagick's](https://imagemagick.org/) powerful image processing capabilities.
+  - **Tool Prefix**: `mcp__imagemagick__*`
+- **`pbr-generator-mcp`**: Provides access to the `tessellating-pbr-generator` for creating high-quality, seamless PBR materials.
+  - **Tool Prefix**: `mcp__pbr_generator__*`
+- **`ngspice-mcp`**: Allows for SPICE simulation of electronic circuits using [NGSpice](http://ngspice.sourceforge.net/).
+  - **Tool Prefix**: `mcp__ngspice__*`
+
+## Connection
+
+Agents connect to the MCP services through the WebSocket relay on port 3002.
 
 ```javascript
-const ws = new WebSocket('ws://mcp-orchestrator:9001');
+const ws = new WebSocket('ws://localhost:3002');
 ```
 
 ### Message Types
@@ -141,24 +150,18 @@ Direct MCP tool invocation.
 { "type": "pong", "timestamp": "2024-01-15T10:30:00Z" }
 ```
 
-## REST API (http://localhost:9000)
+## WebSocket API (ws://localhost:3002)
 
-### GET /health
-Health check endpoint.
+### Health & Status
 
-**Response:**
-```json
-{
-  "status": "ok",
-  "uptime": 3600,
-  "websocketClients": 5,
-  "mcpServers": [
-    { "name": "blender", "port": 9876 },
-    { "name": "revit", "port": 8080 },
-    { "name": "unreal", "port": 55557 }
-  ],
-  "lastDataUpdate": "2024-01-15T10:30:00Z"
-}
+The health of individual MCP services can be monitored through `supervisorctl`:
+
+```bash
+# From inside the container
+supervisorctl status
+
+# Or using the powerdev.sh script from the host
+./powerdev.sh mcp status
 ```
 
 ### GET /api/mcp/data

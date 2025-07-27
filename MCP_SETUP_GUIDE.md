@@ -8,6 +8,10 @@ The multi-agent Docker environment now includes full MCP support with:
 - **Claude Flow**: Swarm orchestration and coordination
 - **Ruv Swarm**: Advanced agent management
 - **Blender MCP**: 3D modeling and rendering via remote connection
+- **Internal MCP Tools**: A suite of tools running inside the container, including:
+  - `imagemagick-mcp`: Image processing via ImageMagick.
+  - `pbr-generator-mcp`: PBR texture generation.
+  - `ngspice-mcp`: Electronic circuit simulation with NGSpice.
 
 ## Key Changes Made
 
@@ -91,7 +95,7 @@ For accessing Blender MCP on a remote host (192.168.0.216):
    ```
 
 2. **Bridge Script**: The `mcp-blender-client.js` acts as a protocol bridge
-   
+
 3. **Environment Variables**: Configure in `.env` or at runtime:
    ```bash
    BLENDER_HOST=192.168.0.216
@@ -145,6 +149,9 @@ Once configured, MCP tools are available with the `mcp__` prefix:
 - **Claude Flow**: `mcp__claude-flow__*`
 - **Ruv Swarm**: `mcp__ruv-swarm__*`
 - **Blender**: `mcp__blender__*` (when connected)
+- **ImageMagick**: `mcp__imagemagick__*`
+- **PBR Generator**: `mcp__pbr_generator__*`
+- **NGSpice**: `mcp__ngspice__*`
 
 Example:
 ```javascript

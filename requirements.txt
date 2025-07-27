@@ -8,3 +8,12 @@ h2o
 xgboost
 flake8
 pylint
+# New 2D/3D Additions
+open3d
+pymeshlab
+nerfstudio
+# Note: gaussian-splatting-pytorch is not a standard PyPI package name.
+# A specific implementation will need to be installed via pip git+https,
+# which can be added later once a repository is chosen.
+# For now, this is a placeholder.
+# gaussian-splatting-pytorch

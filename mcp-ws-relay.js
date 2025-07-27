@@ -1,6 +1,9 @@
 const WebSocket = require('ws');
 
-const wss = new WebSocket.Server({ port: 8080 });
+const port = process.env.MCP_WS_RELAY_PORT || 3002;
+const wss = new WebSocket.Server({ port });
+
+console.log(`MCP WebSocket relay starting on port ${port}`);
 
 wss.on('connection', ws => {
   console.log('Client connected');

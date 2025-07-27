@@ -125,8 +125,8 @@ EOF
 cat >> /home/dev/.bashrc << 'EOF'
 
 # MCP Server Management
-alias mcp-status='supervisorctl status'
-alias mcp-restart='supervisorctl restart all'
+alias mcp-status='supervisorctl -c /etc/supervisor/conf.d/supervisord.conf status'
+alias mcp-restart='supervisorctl -c /etc/supervisor/conf.d/supervisord.conf restart all'
 alias mcp-logs='tail -f /app/mcp-logs/*.log'
 alias mcp-test-blender='nc -zv localhost 9876'
 alias mcp-test-revit='nc -zv localhost 8080'
@@ -165,9 +165,21 @@ echo ""
 # Handle first run vs subsequent runs
 FIRST_RUN_MARKER="/home/dev/.first_run_complete"
 if [ ! -f "$FIRST_RUN_MARKER" ] && [ "$1" = "--interactive" ]; then
+    echo "--- First run: Initializing MCP environment ---"
+
+    # Run MCP server initialization script
+    if [ -f "/workspace/init-mcp-servers.sh" ]; then
+        echo "Running MCP server initialization..."
+        bash /workspace/init-mcp-servers.sh
+    else
+        echo "Warning: /workspace/init-mcp-servers.sh not found. Skipping."
+    fi
+
     echo "--- First run: setting up Claude login ---"
-    touch "$FIRST_RUN_MARKER"
     claude login || true
+
+    # Mark first run as complete to avoid re-running
+    touch "$FIRST_RUN_MARKER"
 fi
 
 # Start appropriate process based on command

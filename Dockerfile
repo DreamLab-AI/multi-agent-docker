@@ -101,8 +101,49 @@ RUN python3.12 -m venv /opt/venv312 && \
     python3.13 -m venv /opt/venv313 && \
     /opt/venv313/bin/pip install --upgrade pip wheel setuptools
 
+# ---------- 2D/3D TOOLING ADDITIONS ----------
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    # Foundational 2D Tools
+    imagemagick \
+    inkscape \
+    ffmpeg \
+    # Photogrammetry & Reconstruction Tools
+    libcolmap-dev \
+    # Meshroom (AliceVision) dependencies
+    libpng-dev libjpeg-dev libtiff-dev libopenexr-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Meshroom (AliceVision) from release binary for simplicity
+RUN wget https://github.com/alicevision/Meshroom/releases/download/v2023.1.0/Meshroom-2023.1.0-linux-x86_64.tar.gz -O meshroom.tar.gz && \
+    tar -xzf meshroom.tar.gz -C /opt && \
+    rm meshroom.tar.gz
+ENV PATH="/opt/Meshroom-2023.1.0:${PATH}"
+
+# ---------- Tessellating PBR Generator Integration ----------
+RUN git clone https://github.com/jjohare/tessellating-pbr-generator.git /opt/tessellating-pbr-generator && \
+    /opt/venv312/bin/pip install --no-cache-dir -r /opt/tessellating-pbr-generator/requirements.txt
+
+# ---------- EDA & CIRCUIT DESIGN TOOLING ADDITIONS ----------
+# Add KiCad PPA for up-to-date version and update package lists
+RUN add-apt-repository -y ppa:kicad/kicad-7.0-releases && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    # Analog Simulation
+    ngspice \
+    # PCB Design & Verification
+    kicad \
+    kicad-cli \
+    # Digital Logic Design & FPGA/ASIC Flow
+    iverilog \
+    gtkwave \
+    yosys \
+    nextpnr-generic && \
+    rm -rf /var/lib/apt/lists/*
+
 # ---------- Install global CLI tools with specific versions ----------
 RUN npm install -g \
+    gltf-pipeline \
     claude-flow@alpha \
     ruv-swarm@latest \
     @anthropic-ai/claude-code@latest \
@@ -171,7 +212,7 @@ RUN (id ubuntu &>/dev/null && userdel -r ubuntu) || true && \
     # Create python symlink for convenience
     ln -s /usr/bin/python3.12 /usr/local/bin/python && \
     # Create workspace directories with proper ownership
-    mkdir -p /workspace /workspace/ext/src /workspace/logs /workspace/.claude /workspace/.mcp /workspace/memory && \
+    mkdir -p /workspace /workspace/ext/src /workspace/logs /workspace/.claude /workspace/.mcp /workspace/memory /workspace/.supervisor && \
     chown -R dev:dev /workspace && \
     # Make uv accessible to dev user
     cp -r /root/.local /home/dev/ && \
@@ -182,9 +223,24 @@ RUN (id ubuntu &>/dev/null && userdel -r ubuntu) || true && \
     echo 'export PATH="/home/dev/.npm-global/bin:$PATH"' >> /home/dev/.bashrc
 
 
+# Create log directory for supervisord and give dev user ownership
+RUN mkdir -p /app/mcp-logs && chown -R dev:dev /app/mcp-logs
+
 USER dev
 WORKDIR /workspace
 COPY --chown=dev:dev mcp-ws-relay.js /workspace/ext/src/
+COPY --chown=dev:dev init-mcp-servers.sh /workspace/
+RUN chmod +x /workspace/init-mcp-servers.sh
+
+# Add package.json and install dependencies for the relay
+RUN echo '{"name": "mcp-ws-relay", "version": "1.0.0", "dependencies": {"ws": "latest"}}' > /workspace/ext/src/package.json && \
+    chown dev:dev /workspace/ext/src/package.json
+
+# Install relay dependencies as root, then give ownership to dev
+USER root
+RUN cd /workspace/ext/src && npm install && chown -R dev:dev /workspace/ext/src
+USER dev
+
 COPY README.md .
 COPY CLAUDE-README.md .
 

@@ -24,7 +24,7 @@
 | **Node 22 LTS** | PRIMARY: `claude-flow@alpha`, supporting: `ruv-swarm`, `revit-mcp`, `vite`, `typescript`, `eslint`, `prettier`, `jest`, `storybook` |
 | **Linters** | `shellcheck`, `flake8`, `pylint`, `hadolint` |
 | **LaTeX** | `texlive-full`, `latexmk`, `chktex` |
-| **Extras** | `tmux`, `hyperfine`, `docker`, `WasmEdge`, `OpenVINO`, `Modular MAX`, `Blender`, `uv` |
+| **Extras** | `tmux`, `hyperfine`, `docker`, `WasmEdge`, `OpenVINO`, `Modular MAX`, `Blender`, `uv`, `ImageMagick`, `Inkscape`, `FFmpeg`, `Meshroom`, `NGSpice`, `KiCad`, `Icarus Verilog`, `Yosys`, `nextpnr` |
 | **Web UI** | Claude-Flow UI → **http://localhost:3000** (PRIMARY INTERFACE) |
 
 ### Quick env switches:

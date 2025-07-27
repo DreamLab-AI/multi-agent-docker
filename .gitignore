@@ -1,4 +1,29 @@
+# Environment files
 .env
+.env.*
+!/.env.example
+
+# Local directories
 workspace
-mcp-logs
+/mcp-logs/
 .venv/
+pbr_outputs/
+
+# IDE/Editor specific files
+.vscode/
+.idea/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Build artifacts
+/dist/
+/build/
+*.egg-info/
+
+# Log files
+*.log

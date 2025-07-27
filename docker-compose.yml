@@ -34,6 +34,7 @@ services:
     volumes:
       - ./workspace:/workspace
       - ./blender-files:/blender-files
+      - ./pbr_outputs:/workspace/pbr_outputs
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - ${EXTERNAL_DIR:-./.agent-mount/ext}:/workspace/ext
 
@@ -52,8 +53,8 @@ services:
       - SYS_PTRACE
 
     # Resource limits
-    mem_limit: 100g
-    cpus: "24.0"
+    mem_limit: ${DOCKER_MEMORY:-16g}
+    cpus: "${DOCKER_CPUS:-4}"
 
     # Healthcheck
     healthcheck:
