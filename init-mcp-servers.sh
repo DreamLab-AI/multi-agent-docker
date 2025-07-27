@@ -23,7 +23,7 @@ command_exists() {
 test_mcp_server() {
     local server_name=$1
     local test_command=$2
-    
+
     echo -e "${YELLOW}Testing ${server_name}...${NC}"
     if eval "$test_command" 2>/dev/null; then
         echo -e "${GREEN}✓ ${server_name} is working${NC}"
@@ -96,6 +96,34 @@ else
         "BLENDER_HOST": "${BLENDER_HOST:-192.168.0.216}",
         "BLENDER_PORT": "${BLENDER_PORT:-9876}"
       }
+    },
+    "kicad-mcp": {
+      "command": "python3",
+      "args": [
+        "/app/mcp-tools/kicad_mcp.py"
+      ],
+      "type": "stdio"
+    },
+    "ngspice-mcp": {
+      "command": "python3",
+      "args": [
+        "/app/mcp-tools/ngspice_mcp.py"
+      ],
+      "type": "stdio"
+    },
+    "imagemagick-mcp": {
+      "command": "python3",
+      "args": [
+        "/app/mcp-tools/imagemagick_mcp.py"
+      ],
+      "type": "stdio"
+    },
+    "pbr-generator-mcp": {
+      "command": "python3",
+      "args": [
+        "/app/mcp-tools/pbr_generator_mcp.py"
+      ],
+      "type": "stdio"
     }
   }
 }
@@ -120,6 +148,11 @@ if [ -n "${BLENDER_HOST}" ]; then
         echo -e "${YELLOW}! Blender MCP server not reachable (will retry when needed)${NC}"
     fi
 fi
+
+# Test local MCP tools
+test_mcp_server "KiCad MCP" "python3 -c 'import sys; sys.path.append(\"/app/mcp-tools\"); import kicad_mcp; print(\"KiCad MCP ready\")'"
+test_mcp_server "NGSpice MCP" "python3 -c 'import sys; sys.path.append(\"/app/mcp-tools\"); import ngspice_mcp; print(\"NGSpice MCP ready\")'"
+test_mcp_server "ImageMagick MCP" "python3 -c 'import sys; sys.path.append(\"/app/mcp-tools\"); import imagemagick_mcp; print(\"ImageMagick MCP ready\")'"
 
 # Step 4: Initialize Claude settings
 echo -e "\n${YELLOW}Step 4: Initializing Claude settings...${NC}"
@@ -164,6 +197,35 @@ else
     echo "✗ Not reachable at ${BLENDER_HOST:-not_set}:${BLENDER_PORT:-9876}"
 fi
 
+# Check local MCP tools
+echo -n "KiCad MCP: "
+if [ -f "/app/mcp-tools/kicad_mcp.py" ]; then
+    echo "✓ Available"
+else
+    echo "✗ Not found"
+fi
+
+echo -n "NGSpice MCP: "
+if [ -f "/app/mcp-tools/ngspice_mcp.py" ]; then
+    echo "✓ Available"
+else
+    echo "✗ Not found"
+fi
+
+echo -n "ImageMagick MCP: "
+if [ -f "/app/mcp-tools/imagemagick_mcp.py" ]; then
+    echo "✓ Available"
+else
+    echo "✗ Not found"
+fi
+
+echo -n "OSS CAD Suite: "
+if [ -d "/opt/oss-cad-suite" ]; then
+    echo "✓ Installed at /opt/oss-cad-suite"
+else
+    echo "✗ Not found"
+fi
+
 # Check MCP configuration
 echo -n "MCP Config: "
 if [ -f "/workspace/.mcp.json" ]; then
@@ -190,7 +252,7 @@ echo "Port: $BLENDER_PORT"
 # Test TCP connection
 if nc -z -w5 $BLENDER_HOST $BLENDER_PORT 2>/dev/null; then
     echo "✓ TCP connection successful"
-    
+
     # Try to send a test message
     echo '{"jsonrpc":"2.0","method":"ping","id":1}' | nc -w2 $BLENDER_HOST $BLENDER_PORT
 else

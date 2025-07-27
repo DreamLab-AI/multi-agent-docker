@@ -32,7 +32,8 @@ RUN echo \
       "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
       tee /etc/apt/sources.list.d/docker.list > /dev/null
 # Add Deadsnakes PPA for newer Python versions
-RUN add-apt-repository -y ppa:deadsnakes/ppa
+RUN add-apt-repository -y ppa:deadsnakes/ppa && \
+    add-apt-repository -y ppa:kicad/kicad-8.0-releases
 # Add NodeSource repository for up-to-date NodeJS (v22+)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 # Install all packages including network utilities
@@ -109,37 +110,70 @@ RUN apt-get update && \
     inkscape \
     ffmpeg \
     # Photogrammetry & Reconstruction Tools
-    libcolmap-dev \
+    colmap \
     # Meshroom (AliceVision) dependencies
     libpng-dev libjpeg-dev libtiff-dev libopenexr-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Meshroom (AliceVision) from release binary for simplicity
-RUN wget https://github.com/alicevision/Meshroom/releases/download/v2023.1.0/Meshroom-2023.1.0-linux-x86_64.tar.gz -O meshroom.tar.gz && \
-    tar -xzf meshroom.tar.gz -C /opt && \
-    rm meshroom.tar.gz
-ENV PATH="/opt/Meshroom-2023.1.0:${PATH}"
+# RUN wget "https://www.fosshub.com/Meshroom.html?dwl=Meshroom-2023.3.0-linux.tar.gz" -O meshroom.tar.gz && \
+#     tar -xzf meshroom.tar.gz -C /opt && \
+#     rm meshroom.tar.gz
+# ENV PATH="/opt/Meshroom-2023.3.0/bin:${PATH}"
 
 # ---------- Tessellating PBR Generator Integration ----------
 RUN git clone https://github.com/jjohare/tessellating-pbr-generator.git /opt/tessellating-pbr-generator && \
     /opt/venv312/bin/pip install --no-cache-dir -r /opt/tessellating-pbr-generator/requirements.txt
 
 # ---------- EDA & CIRCUIT DESIGN TOOLING ADDITIONS ----------
-# Add KiCad PPA for up-to-date version and update package lists
-RUN add-apt-repository -y ppa:kicad/kicad-7.0-releases && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
-    # Analog Simulation
-    ngspice \
-    # PCB Design & Verification
-    kicad \
-    kicad-cli \
-    # Digital Logic Design & FPGA/ASIC Flow
-    iverilog \
-    gtkwave \
-    yosys \
-    nextpnr-generic && \
+# Install snapd for KiCad installation
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends snapd && \
     rm -rf /var/lib/apt/lists/*
+
+# ---------- Install OSS CAD Suite for comprehensive EDA tools ----------
+# This provides Yosys, nextpnr, iverilog, gtkwave, ngspice and other tools
+RUN wget https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2024-04-17/oss-cad-suite-linux-x64-20240417.tgz -O oss-cad-suite.tgz && \
+    mkdir -p /opt/oss-cad-suite && \
+    tar -xzf oss-cad-suite.tgz -C /opt/oss-cad-suite --strip-components=1 && \
+    rm oss-cad-suite.tgz
+
+# ---------- Install KiCad via AppImage (more reliable than apt) ----------
+RUN wget https://downloads.kicad.org/kicad/8.0.7/kicad-8.0.7-x86_64.AppImage -O /opt/kicad.AppImage && \
+    chmod +x /opt/kicad.AppImage && \
+    # Create wrapper script for KiCad
+    echo '#!/bin/bash' > /usr/local/bin/kicad && \
+    echo 'exec /opt/kicad.AppImage "$@"' >> /usr/local/bin/kicad && \
+    chmod +x /usr/local/bin/kicad
+
+# ---------- Install KiCad MCP Server ----------
+RUN git clone https://github.com/lamaalrajih/kicad-mcp.git /opt/kicad-mcp && \
+    cd /opt/kicad-mcp && \
+    /opt/venv312/bin/pip install -r requirements.txt && \
+    chmod +x /opt/kicad-mcp/src/kicad_mcp_server.py
+
+# ---------- Additional EDA Tools for AI Circuit Design ----------
+# Install more comprehensive circuit design tools
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    # Circuit analysis and optimization tools
+    octave \
+    python3-numpy python3-scipy python3-matplotlib \
+    # Documentation and visualization
+    graphviz \
+    # Build tools for custom EDA software
+    cmake ninja-build && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install additional Python packages for circuit analysis in venv312
+RUN /opt/venv312/bin/pip install --no-cache-dir \
+    schemdraw \
+    PySpice \
+    scikit-rf \
+    lcapy \
+    ahkab \
+    pyltspice \
+    pycircuit
 
 # ---------- Install global CLI tools with specific versions ----------
 RUN npm install -g \
@@ -230,7 +264,9 @@ USER dev
 WORKDIR /workspace
 COPY --chown=dev:dev mcp-ws-relay.js /workspace/ext/src/
 COPY --chown=dev:dev init-mcp-servers.sh /workspace/
-RUN chmod +x /workspace/init-mcp-servers.sh
+COPY --chown=dev:dev mcp-tools/ /app/mcp-tools/
+RUN chmod +x /workspace/init-mcp-servers.sh && \
+    chmod +x /app/mcp-tools/*.py
 
 # Add package.json and install dependencies for the relay
 RUN echo '{"name": "mcp-ws-relay", "version": "1.0.0", "dependencies": {"ws": "latest"}}' > /workspace/ext/src/package.json && \
@@ -249,7 +285,7 @@ RUN git config --global user.email "swarm@dreamlab-ai.com" && \
     git config --global user.name "Swarm Agent"
 
 # Activate 3.12 venv by default
-ENV PATH="/opt/venv312/bin:/home/dev/.local/bin:${PATH}"
+ENV PATH="/opt/oss-cad-suite/bin:/opt/venv312/bin:/home/dev/.local/bin:${PATH}"
 
 # Runtime placeholders
 ENV WASMEDGE_PLUGIN_PATH="/usr/local/lib/wasmedge"
