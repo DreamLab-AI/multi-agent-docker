@@ -432,7 +432,7 @@ mcp() {
       ;;
     test-blender)
       echo "Testing Blender MCP connection..."
-      docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" exec powerdev bash -c "cd /workspace && BLENDER_HOST=${BLENDER_HOST:-192.168.0.216} BLENDER_PORT=${BLENDER_PORT:-9876} ./test-blender-mcp.sh"
+      docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" exec powerdev bash -c "cd /workspace && BLENDER_HOST=${BLENDER_HOST:-blender_desktop} BLENDER_PORT=${BLENDER_PORT:-9876} ./test-blender-mcp.sh"
       ;;
     logs)
       local server="${3:-all}"

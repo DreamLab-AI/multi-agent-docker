@@ -93,7 +93,7 @@ else
       ],
       "type": "stdio",
       "env": {
-        "BLENDER_HOST": "${BLENDER_HOST:-192.168.0.216}",
+        "BLENDER_HOST": "${BLENDER_HOST:-blender_desktop}",
         "BLENDER_PORT": "${BLENDER_PORT:-9876}"
       }
     },
@@ -242,7 +242,7 @@ cat > /workspace/test-blender-mcp.sh << 'EOF'
 #!/bin/bash
 # Test Blender MCP connection
 
-BLENDER_HOST=${BLENDER_HOST:-192.168.0.216}
+BLENDER_HOST=${BLENDER_HOST:-blender_desktop}
 BLENDER_PORT=${BLENDER_PORT:-9876}
 
 echo "Testing Blender MCP connection..."
