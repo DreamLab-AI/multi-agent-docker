@@ -1,0 +1,43 @@
+{
+  "mcpServers": {
+    "claude-flow": {
+      "command": "npx",
+      "args": ["claude-flow@alpha", "mcp", "start"],
+      "type": "stdio"
+    },
+    "ruv-swarm": {
+      "command": "npx",
+      "args": ["ruv-swarm@latest", "mcp", "start"],
+      "type": "stdio"
+    },
+    "blender-tcp": {
+      "command": "node",
+      "args": ["./mcp-blender-client.js"],
+      "type": "stdio",
+      "env": {
+        "BLENDER_HOST": "${BLENDER_HOST:-blender-host}",
+        "BLENDER_PORT": "${BLENDER_PORT:-9876}"
+      }
+    },
+    "kicad-mcp": {
+      "command": "python3",
+      "args": ["./mcp-tools/kicad_mcp.py"],
+      "type": "stdio"
+    },
+    "ngspice-mcp": {
+      "command": "python3",
+      "args": ["./mcp-tools/ngspice_mcp.py"],
+      "type": "stdio"
+    },
+    "imagemagick-mcp": {
+      "command": "python3",
+      "args": ["./mcp-tools/imagemagick_mcp.py"],
+      "type": "stdio"
+    },
+    "pbr-generator-mcp": {
+      "command": "python3",
+      "args": ["./mcp-tools/pbr_generator_mcp.py"],
+      "type": "stdio"
+    }
+  }
+}

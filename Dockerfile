@@ -6,11 +6,11 @@ FROM nvidia/cuda:12.9.0-cudnn-devel-ubuntu24.04 AS base
 ################################################################################
 ARG DEBIAN_FRONTEND=noninteractive
 
-# 1. Set Environment Variables for Blender
-# Set the Blender version and create a directory for it.
-ARG BLENDER_DOWNLOAD_URL
-ENV BLENDER_VERSION="4.5"
-ENV BLENDER_PATH="/usr/local/blender"
+# 1. Set Environment Variables
+# Internal Blender has been removed. This environment now connects to an external Blender instance.
+# ARG BLENDER_DOWNLOAD_URL
+# ENV BLENDER_VERSION="4.5"
+# ENV BLENDER_PATH="/usr/local/blender"
 
 # Set the application workspace directory
 ENV APP_HOME="/app"
@@ -65,31 +65,12 @@ RUN apt-get update && \
     wget -O /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 && \
     chmod +x /usr/local/bin/hadolint
 
-# 3. Install Blender
-# Download and extract the specified Blender LTS version.
-# Use default URL if not provided
-RUN BLENDER_URL=${BLENDER_DOWNLOAD_URL:-"https://download.blender.org/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz"} && \
-    wget "${BLENDER_URL}" -O blender.tar.xz && \
-    tar -xf blender.tar.xz && \
-    mv blender-${BLENDER_VERSION}.0-linux-x64 ${BLENDER_PATH} && \
-    rm blender.tar.xz
-
-# 4. Create addon directory and copy files later
-# We'll copy the addon files after creating the proper directory structure
-RUN mkdir -p ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/addon
-
-# 5. Install the MCP Server Package Dependencies
-# Install dependencies for the addon using Blender's Python
-RUN ${BLENDER_PATH}/${BLENDER_VERSION}/python/bin/python3.11 -m ensurepip && \
-    ${BLENDER_PATH}/${BLENDER_VERSION}/python/bin/python3.11 -m pip install --upgrade pip && \
-    ${BLENDER_PATH}/${BLENDER_VERSION}/python/bin/python3.11 -m pip install Pillow
-
-# 6. Set PYTHONPATH for Blender integration
+# 2. Set PYTHONPATH
 ENV PYTHONPATH="${APP_HOME}"
 
-# 7. Copy startup and addon files
-# Copy addon.py to both local Blender installation and app directory for flexibility
-COPY addon.py ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/addon/__init__.py
+# 3. Copy essential project files
+# We no longer copy the Blender addon.
+# COPY addon.py ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/addon/__init__.py
 COPY addon.py $APP_HOME/
 COPY keep_alive.py $APP_HOME/
 COPY entrypoint.sh /
@@ -248,19 +229,18 @@ RUN mkdir -p /app/mcp-logs && chown -R dev:dev /app/mcp-logs
 
 USER dev
 WORKDIR /workspace
-COPY --chown=dev:dev mcp-ws-relay.js /workspace/ext/src/
-COPY --chown=dev:dev init-mcp-servers.sh /workspace/
+COPY --chown=dev:dev core-assets/ /app/core-assets/
 COPY --chown=dev:dev mcp-tools/ /app/mcp-tools/
-RUN chmod +x /workspace/init-mcp-servers.sh && \
-    chmod +x /app/mcp-tools/*.py
+COPY --chown=dev:dev setup-workspace.sh /app/setup-workspace.sh
+RUN chmod +x /app/mcp-tools/*.py && \
+    chmod +x /app/setup-workspace.sh
 
-# Add package.json and install dependencies for the relay
-RUN echo '{"name": "mcp-ws-relay", "version": "1.0.0", "dependencies": {"ws": "latest"}}' > /workspace/ext/src/package.json && \
-    chown dev:dev /workspace/ext/src/package.json
+# Add package.json and install dependencies for the WS bridge
+RUN echo '{"name": "mcp-ws-bridge", "version": "1.0.0", "dependencies": {"ws": "latest"}}' > /app/package.json
 
 # Install relay dependencies as root, then give ownership to dev
 USER root
-RUN cd /workspace/ext/src && npm install && chown -R dev:dev /workspace/ext/src
+RUN cd /app && npm install && chown -R dev:dev /app
 USER dev
 
 COPY README.md .
