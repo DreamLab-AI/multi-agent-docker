@@ -38,6 +38,11 @@
       "command": "python3",
       "args": ["./mcp-tools/pbr_generator_mcp.py"],
       "type": "stdio"
+    },
+    "qgis-mcp": {
+      "command": "python3",
+      "args": ["./mcp-tools/qgis_mcp.py"],
+      "type": "stdio"
     }
   }
 }

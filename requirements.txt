@@ -17,3 +17,4 @@ nerfstudio
 # which can be added later once a repository is chosen.
 # For now, this is a placeholder.
 # gaussian-splatting-pytorch
+fastmcp

@@ -112,6 +112,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends kicad && \
     rm -rf /var/lib/apt/lists/*
 
+
 # ---------- Install OSS CAD Suite for comprehensive EDA tools ----------
 # This provides Yosys, nextpnr, iverilog, gtkwave, ngspice and other tools
 RUN wget https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2024-04-17/oss-cad-suite-linux-x64-20240417.tgz -O oss-cad-suite.tgz && \
