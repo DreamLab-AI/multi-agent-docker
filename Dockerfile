@@ -141,6 +141,10 @@ RUN /opt/venv312/bin/pip install --no-cache-dir \
     pycircuit
 
 # ---------- Install global CLI tools with specific versions ----------
+# We install better-sqlite3 first and build it from source to ensure
+# the native bindings are compiled for the correct environment.
+RUN npm install -g better-sqlite3 --build-from-source
+
 RUN npm install -g \
     gltf-pipeline \
     claude-flow@alpha \
@@ -176,12 +180,15 @@ ENV RUSTFLAGS="-C target-cpu=skylake-avx512 -C target-feature=+avx2,+avx512f,+av
 
 # ---------- Install uv (fast python package manager) and uvx ----------
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
-    echo 'export PATH="/root/.local/bin:$PATH"' >> /etc/profile.d/uv.sh
+    echo 'export PATH="/root/.local/bin:$PATH"' >> /etc/profile.d/uv.sh && \
+    # Verify uvx is installed and working
+    /root/.local/bin/uv --version && \
+    /root/.local/bin/uvx --version
 
 # ---------- Install Deno ----------
-RUN curl -fsSL https://deno.land/x/install/install.sh | sh && \
-    echo 'export DENO_INSTALL="/root/.deno"' >> /etc/profile.d/deno.sh && \
-    echo 'export PATH="$DENO_INSTALL/bin:$PATH"' >> /etc/profile.d/deno.sh
+RUN curl -fsSL https://deno.land/x/install/install.sh | sh
+ENV DENO_INSTALL="/root/.deno"
+ENV PATH="$DENO_INSTALL/bin:$PATH"
 
 # ---------- GPU‑accelerated Wasm stack (WasmEdge) ----------
 RUN curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install.sh | \
@@ -210,7 +217,7 @@ RUN (id ubuntu &>/dev/null && userdel -r ubuntu) || true && \
     echo "dev ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev && chmod 0440 /etc/sudoers.d/dev && \
     # Fix ownership of npm global modules so dev user can write to them
     chown -R dev:dev /usr/lib/node_modules && \
-    # Create npm global directory for dev user and configure npm
+    # Create npm global directory for dev user
     mkdir -p /home/dev/.npm-global && \
     chown -R dev:dev /home/dev/.npm-global && \
     # Create python symlink for convenience
@@ -218,13 +225,12 @@ RUN (id ubuntu &>/dev/null && userdel -r ubuntu) || true && \
     # Create workspace directories with proper ownership
     mkdir -p /workspace /workspace/ext/src /workspace/logs /workspace/.claude /workspace/.mcp /workspace/memory /workspace/.supervisor && \
     chown -R dev:dev /workspace && \
-    # Make uv accessible to dev user
+    # Copy and configure uv for dev user
     cp -r /root/.local /home/dev/ && \
     chown -R dev:dev /home/dev/.local && \
-    echo 'export PATH="/home/dev/.local/bin:$PATH"' >> /home/dev/.bashrc && \
-    # Configure npm for global installs without sudo
-    echo 'export NPM_CONFIG_PREFIX="/home/dev/.npm-global"' >> /home/dev/.bashrc && \
-    echo 'export PATH="/home/dev/.npm-global/bin:$PATH"' >> /home/dev/.bashrc
+    # Copy and configure Deno for dev user
+    cp -r /root/.deno /home/dev/ && \
+    chown -R dev:dev /home/dev/.deno
 
 
 # Create log directory for supervisord and give dev user ownership
@@ -232,11 +238,17 @@ RUN mkdir -p /app/mcp-logs && chown -R dev:dev /app/mcp-logs
 
 USER dev
 WORKDIR /workspace
-COPY --chown=dev:dev core-assets/ /app/core-assets/
-COPY --chown=dev:dev mcp-tools/ /app/mcp-tools/
+COPY --chown=dev:dev core-assets/mcp.json /app/core-assets/mcp.json
+COPY --chown=dev:dev core-assets/scripts/ /app/core-assets/scripts/
+COPY --chown=dev:dev core-assets/mcp-tools/ /app/core-assets/mcp-tools/
 COPY --chown=dev:dev setup-workspace.sh /app/setup-workspace.sh
-RUN chmod +x /app/mcp-tools/*.py && \
+RUN chmod +x /app/core-assets/mcp-tools/*.py && \
     chmod +x /app/setup-workspace.sh
+
+# Install Node.js dependencies for MCP client scripts
+USER root
+RUN cd /app/core-assets/scripts && npm install && chown -R dev:dev /app/core-assets/scripts/node_modules
+USER dev
 
 # Add package.json and install dependencies for the WS bridge
 USER root
@@ -253,8 +265,12 @@ COPY SWARM-BRIEFING.md .
 RUN git config --global user.email "swarm@dreamlab-ai.com" && \
     git config --global user.name "Swarm Agent"
 
-# Activate 3.12 venv by default
-ENV PATH="/opt/oss-cad-suite/bin:/opt/venv312/bin:/home/dev/.local/bin:${PATH}"
+# Configure environment for the dev user.
+# This ensures that all tools (Deno, uv, npm globals) are correctly in the PATH
+# for both interactive shells and scripts.
+ENV DENO_INSTALL="/home/dev/.deno"
+ENV NPM_CONFIG_PREFIX="/home/dev/.npm-global"
+ENV PATH="/home/dev/.deno/bin:/home/dev/.local/bin:/home/dev/.npm-global/bin:/opt/oss-cad-suite/bin:/opt/venv312/bin:${PATH}"
 
 # Runtime placeholders
 ENV WASMEDGE_PLUGIN_PATH="/usr/local/lib/wasmedge"

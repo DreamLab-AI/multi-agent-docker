@@ -1,0 +1,8 @@
+{
+  "name": "mcp-client-scripts",
+  "version": "1.0.0",
+  "description": "Dependencies for MCP Node.js client scripts",
+  "dependencies": {
+    "ws": "latest"
+  }
+}

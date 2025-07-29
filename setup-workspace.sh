@@ -10,30 +10,58 @@ if [ -d ".claude" ] && [ "$1" != "--force" ]; then
     exit 0
 fi
 
-# 2. Copy core assets from the image into the workspace
-echo "📂 Copying core assets into workspace..."
-cp -r /app/core-assets/claude-config/. ./.claude/
-cp -r /app/core-assets/roo-config/. ./.roo/
-cp -r /app/mcp-tools/. ./mcp-tools/
-cp /app/core-assets/scripts/mcp-blender-client.js .
+# 2. Copy essential assets from the image into the workspace
+echo "📂 Copying essential assets into workspace..."
+cp -r /app/core-assets/mcp-tools/. ./mcp-tools/
+cp -r /app/core-assets/scripts/. ./scripts/
 cp /app/core-assets/mcp.json ./.mcp.json
-echo "✅ Core assets copied."
+echo "✅ Essential assets copied."
 
-# 3. Interactively initialize claude-flow
+# 3. Install and initialize claude-flow
 echo "--------------------------------------------------"
-echo "🤖 Starting Claude Flow initialization..."
+echo "📦 Installing claude-flow locally..."
+npm install claude-flow@alpha
+echo "🚀 Starting Claude Flow initialization..."
 echo "This will set up your agent environment."
-npx claude-flow@alpha init --force --hive-mind --neural-enhanced
+./node_modules/.bin/claude-flow init --force --hive-mind --neural-enhanced
 
 # 4. Set up MCP tools within claude-flow
 echo "--------------------------------------------------"
 echo "🛠️ Setting up MCP tools..."
-npx claude-flow@alpha mcp setup --auto-permissions --87-tools
+./node_modules/.bin/claude-flow mcp setup --auto-permissions --87-tools
 
 # 5. Initialize MCP servers based on the copied .mcp.json
 echo "--------------------------------------------------"
 echo "🔌 Initializing MCP servers from .mcp.json..."
-npx claude-flow@alpha mcp init --file ./.mcp.json
+./node_modules/.bin/claude-flow mcp init --file ./.mcp.json || true
+echo "Manually adding MCP servers..."
+claude mcp add claude-flow "npx claude-flow@alpha mcp start" || true
+claude mcp add ruv-swarm "npx ruv-swarm mcp start" || true
+
+# 6. Verify MCP servers are ready
+echo "--------------------------------------------------"
+echo "🔗 Verifying MCP servers and tools..."
+echo "Checking supervisord background services..."
+supervisorctl -c /etc/supervisor/conf.d/supervisord.conf status || echo "ℹ️  Supervisord may not be running yet. Start it with: sudo supervisord -c /etc/supervisor/conf.d/supervisord.conf"
+
+echo ""
+echo "Checking claude-flow tool availability..."
+# Use claude-flow to list tools and check if our key tools are registered.
+if ./node_modules/.bin/claude-flow mcp tools | grep -q "blender-mcp"; then
+    echo "✅ Blender MCP tool is registered with claude-flow."
+else
+    echo "⚠️ Blender MCP tool is NOT registered. Check .mcp.json."
+fi
+
+if ./node_modules/.bin/claude-flow mcp tools | grep -q "qgis-mcp"; then
+    echo "✅ QGIS MCP tool is registered with claude-flow."
+else
+    echo "⚠️ QGIS MCP tool is NOT registered. Check .mcp.json."
+fi
+
+echo ""
+echo "💡 For these tools to work, ensure the external Blender and QGIS applications"
+echo "   with their MCP server plugins are running and accessible from the container."
 
 echo "--------------------------------------------------"
 echo "🎉 Workspace setup complete!"

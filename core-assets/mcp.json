@@ -10,14 +10,15 @@
       "args": ["ruv-swarm@latest", "mcp", "start"],
       "type": "stdio"
     },
-    "blender-tcp": {
+    "blender-mcp": {
       "command": "node",
-      "args": ["./mcp-blender-client.js"],
-      "type": "stdio",
-      "env": {
-        "BLENDER_HOST": "${BLENDER_HOST:-blender-host}",
-        "BLENDER_PORT": "${BLENDER_PORT:-9876}"
-      }
+      "args": ["./scripts/mcp-blender-client.js"],
+      "type": "stdio"
+    },
+    "qgis-mcp": {
+      "command": "python3",
+      "args": ["./mcp-tools/qgis_mcp.py"],
+      "type": "stdio"
     },
     "kicad-mcp": {
       "command": "python3",
@@ -37,11 +38,6 @@
     "pbr-generator-mcp": {
       "command": "python3",
       "args": ["./mcp-tools/pbr_generator_mcp.py"],
-      "type": "stdio"
-    },
-    "qgis-mcp": {
-      "command": "python3",
-      "args": ["./mcp-tools/qgis_mcp.py"],
       "type": "stdio"
     }
   }
