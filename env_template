@@ -1,30 +1,15 @@
-# Core API Keys
-# ANTHROPIC_API_KEY=
-# ANTHROPIC_BASE_URL=
-# ANTHROPIC_MODEL="claude-sonnet-4"
-GITHUB_TOKEN=""
-# OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-# GOOGLE_API_KEY=AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# Multi-Agent Docker Environment Configuration
 
-# Claude Flow Configuration (PRIMARY TOOL)
-CLAUDE_FLOW_PORT=3000
-CLAUDE_FLOW_HOST=0.0.0.0
-CLAUDE_FLOW_DATA_DIR=/home/dev/data/claude-flow
-CLAUDE_FLOW_LOG_LEVEL=info
-CLAUDE_FLOW_DEBUG=false
+# External directory for mounted files
+EXTERNAL_DIR=./.agent-mount/ext
 
-# Directory Configuration
-EXTERNAL_DIR="/mnt/mldata/githubs/blended"
-WASMEDGE_PLUGIN_PATH="/usr/local/lib/wasmedge"
-
-# Resource Limits (optional overrides)
+# Resource limits (leave empty for auto-detection)
 DOCKER_CPUS=
 DOCKER_MEMORY=
 
-# Blender Configuration
-BLENDER_MODE="local"  # Options: "local" for internal headless, "remote" for external MCP server
-BLENDER_DOWNLOAD_URL="https://download.blender.org/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz"
+# External application ports
+BLENDER_PORT=9876
+QGIS_PORT=9877
 
-# Remote MCP Server Configuration (used when BLENDER_MODE="remote")
-REMOTE_MCP_HOST=
-REMOTE_BLENDER_PORT=9876
+# MCP Configuration
+MCP_LOG_LEVEL=info

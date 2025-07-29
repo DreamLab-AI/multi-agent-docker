@@ -51,12 +51,9 @@ RUN apt-get update && \
       # Additional Blender dependencies for headless operation
       libgl1 libglu1-mesa libglib2.0-0 libsm6 libxext6 \
       libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 \
-      # X11 virtual framebuffer for headless rendering
-      xvfb \
       supervisor \
       # Python, Node, and GPU/Wasm dependencies
       python3.12 python3.12-venv python3.12-dev \
-      python3.13 python3.13-venv python3.13-dev \
       nodejs \
       jq \
       libvulkan1 vulkan-tools ocl-icd-libopencl1 && \
@@ -74,11 +71,9 @@ ENV PYTHONPATH="${APP_HOME}"
 COPY entrypoint.sh /
 RUN chmod +x /entrypoint.sh
 
-# ---------- Create Python virtual environments & install global node packages ----------
+# ---------- Create Python virtual environment ----------
 RUN python3.12 -m venv /opt/venv312 && \
-    /opt/venv312/bin/pip install --upgrade pip wheel setuptools && \
-    python3.13 -m venv /opt/venv313 && \
-    /opt/venv313/bin/pip install --upgrade pip wheel setuptools
+    /opt/venv312/bin/pip install --upgrade pip wheel setuptools
 
 # ---------- 2D/3D TOOLING ADDITIONS ----------
 RUN apt-get update && \
@@ -245,25 +240,17 @@ COPY --chown=dev:dev setup-workspace.sh /app/setup-workspace.sh
 RUN chmod +x /app/core-assets/mcp-tools/*.py && \
     chmod +x /app/setup-workspace.sh
 
-# Install Node.js dependencies for MCP client scripts
+# Install Node.js dependencies for all scripts
 USER root
 RUN cd /app/core-assets/scripts && npm install && chown -R dev:dev /app/core-assets/scripts/node_modules
 USER dev
 
-# Add package.json and install dependencies for the WS bridge
-USER root
-RUN echo '{"name": "mcp-ws-bridge", "version": "1.0.0", "dependencies": {"ws": "latest"}}' > /app/package.json
-
-# Install relay dependencies as root, then give ownership to dev
-RUN cd /app && npm install && chown -R dev:dev /app
-USER dev
-
 COPY README.md .
-COPY SWARM-BRIEFING.md .
+COPY AGENT-BRIEFING.md .
 
 # Configure git for the dev user
-RUN git config --global user.email "swarm@dreamlab-ai.com" && \
-    git config --global user.name "Swarm Agent"
+RUN git config --global user.email "agent@multi-agent-docker.com" && \
+    git config --global user.name "Development Agent"
 
 # Configure environment for the dev user.
 # This ensures that all tools (Deno, uv, npm globals) are correctly in the PATH
@@ -276,7 +263,7 @@ ENV PATH="/home/dev/.deno/bin:/home/dev/.local/bin:/home/dev/.npm-global/bin:/op
 ENV WASMEDGE_PLUGIN_PATH="/usr/local/lib/wasmedge"
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-  CMD ["sh", "-c", "command -v claude >/dev/null && command -v claude-flow >/dev/null"] || exit 1
+  CMD ["sh", "-c", "command -v claude-flow >/dev/null"] || exit 1
 
 # Copy supervisor config just before entrypoint
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf

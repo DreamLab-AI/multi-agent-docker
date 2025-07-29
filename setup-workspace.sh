@@ -25,20 +25,12 @@ echo "🚀 Starting Claude Flow initialization..."
 echo "This will set up your agent environment."
 ./node_modules/.bin/claude-flow init --force --hive-mind --neural-enhanced
 
-# 4. Set up MCP tools within claude-flow
-echo "--------------------------------------------------"
-echo "🛠️ Setting up MCP tools..."
-./node_modules/.bin/claude-flow mcp setup --auto-permissions --87-tools
-
-# 5. Initialize MCP servers based on the copied .mcp.json
+# 4. Initialize MCP servers based on the copied .mcp.json
 echo "--------------------------------------------------"
 echo "🔌 Initializing MCP servers from .mcp.json..."
 ./node_modules/.bin/claude-flow mcp init --file ./.mcp.json || true
-echo "Manually adding MCP servers..."
-claude mcp add claude-flow "npx claude-flow@alpha mcp start" || true
-claude mcp add ruv-swarm "npx ruv-swarm mcp start" || true
 
-# 6. Verify MCP servers are ready
+# 5. Verify MCP servers are ready
 echo "--------------------------------------------------"
 echo "🔗 Verifying MCP servers and tools..."
 echo "Checking supervisord background services..."
