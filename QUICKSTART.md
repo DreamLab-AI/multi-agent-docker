@@ -12,7 +12,7 @@ git clone <repository-url> && cd multi-agent-docker
 docker-compose up -d --build
 
 # 3. Enter container
-docker exec -it multi-agent-container /bin/zsh
+docker exec -it multi-agent-container /bin/bash
 
 # 4. Initialize workspace (inside container)
 /app/setup-workspace.sh
@@ -58,7 +58,7 @@ xxxxxxxxxxxx   multi-agent-docker:latest   Up X minutes   3000/tcp, 3002/tcp... 
 ### Step 3: Enter the Container
 
 ```bash
-docker exec -it multi-agent-container /bin/zsh
+docker exec -it multi-agent-container /bin/bash
 ```
 
 You should see a prompt like:
@@ -111,7 +111,10 @@ You know everything is working when:
 
 ```bash
 # Create a test image
-echo '{"tool": "create_image", "params": {"width": 100, "height": 100, "color": "blue", "output": "test.png"}}' | python3 ./mcp-tools/imagemagick_mcp.py
+echo '{"method": "create", "params": {"width": 200, "height": 100, "color": "gold", "output": "gold_bar.png"}}' | python3 ./mcp-tools/imagemagick_mcp.py
+
+# Verify the output
+ls -l gold_bar.png
 ```
 
 ### Connect External Blender
@@ -136,7 +139,7 @@ claude-flow mcp tools --verbose
 | `mcp-status` | Check service status |
 | `claude-flow mcp tools` | List all tools |
 | `exit` | Leave container |
-| `docker exec -it multi-agent-container /bin/zsh` | Re-enter container |
+| `docker exec -it multi-agent-container /bin/bash` | Re-enter container |
 | `docker-compose down` | Stop everything |
 | `docker-compose logs -f` | View logs |
 

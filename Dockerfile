@@ -1,5 +1,7 @@
-# Stage 0 – CUDA 12.9 + cuDNN (official NVIDIA image)
-FROM nvidia/cuda:12.9.0-cudnn-devel-ubuntu24.04 AS base
+# Stage 0 – CUDA + cuDNN (official NVIDIA image)
+# NOTE: The original tag '12.9.0' is not available on Docker Hub.
+# Using the latest available tag for Ubuntu 24.04 as of late 2024.
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu24.04 AS base
 
 ################################################################################
 # Stage 1 – OS deps, Python 3.12 & 3.13 venvs, Rust, Node, ML stack, WasmEdge, Blender

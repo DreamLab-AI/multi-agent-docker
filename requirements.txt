@@ -1,8 +1,5 @@
 wgpu==0.22.2
 tensorflow
-torch==2.7.1
-torchvision
-torchaudio
 keras
 h2o
 xgboost

@@ -49,12 +49,10 @@ preflight() {
   fi
 
   # Ensure required directories exist with proper permissions
-  mkdir -p "./.agent-mount/docker_data" "./.agent-mount/docker_workspace"
-  mkdir -p "./.agent-mount/docker_analysis" "./.agent-mount/docker_logs" "./.agent-mount/docker_output" "./.agent-mount/docker_latex"
-  mkdir -p "./.agent-mount/docker_data/claude-flow"
-  mkdir -p "./workspace" "./blender-files" "./mcp-configs" "./mcp-logs"
-  mkdir -p "./orchestrator" "./mcp-scripts" "./mcp-tools" "./grafana"
-
+  # These directories are mounted as volumes in docker-compose.yml
+  mkdir -p "./workspace"
+  mkdir -p "./blender-files"
+  mkdir -p "./pbr_outputs"
   # Create EXTERNAL_DIR if set
   if [[ -n "${EXTERNAL_DIR:-}" ]]; then
     mkdir -p "${EXTERNAL_DIR}"
@@ -64,11 +62,11 @@ preflight() {
 
   # Set proper permissions for container user (UID 1000)
   if command -v chown >/dev/null 2>&1; then
-    chown -R 1000:1000 "./.agent-mount/" 2>/dev/null || echo "Warning: Could not set ownership (this is normal on some systems)"
+    chown -R 1000:1000 "./workspace" "./blender-files" "./pbr_outputs" "./.agent-mount" 2>/dev/null || echo "Warning: Could not set ownership (this is normal on some systems)"
   fi
 
   # Ensure directories are writable
-  chmod -R 755 "./.agent-mount/"
+  chmod -R 775 "./workspace" "./blender-files" "./pbr_outputs" "./.agent-mount"
 
   echo "Created persistent directories"
 
@@ -209,7 +207,7 @@ logs() {
 # ---- Shell command ---------------------
 shell() {
   echo "Entering multi-agent container..."
-  docker exec -it "$CONTAINER_NAME" /bin/zsh
+  docker exec -it "$CONTAINER_NAME" /bin/bash
 }
 
 

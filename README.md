@@ -37,4 +37,4 @@ Use the helper script for all common operations:
 | `./multi-agent.sh shell` | Open an interactive shell inside the running container. |
 | `./multi-agent.sh logs` | View the container's logs. |
 | `./multi-agent.sh stop` | Stop and remove the container. |
-| `./multi-agent.sh cleanup`| Stop the container and remove all associated volumes. |
+| `./multi-agent.sh cleanup` | Stop the container and remove all associated volumes. |

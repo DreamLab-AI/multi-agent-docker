@@ -209,29 +209,30 @@ flowchart TB
 ```
 
 ## File Structure
+The environment uses a two-part file structure to separate the immutable core system from the dynamic user workspace.
 
 ```
 /
 ├── app/
 │   ├── core-assets/
-│   │   ├── mcp.json          # MCP tool definitions
-│   │   ├── mcp-tools/        # Python-based MCP tools
-│   │   │   ├── qgis_mcp.py
-│   │   │   ├── imagemagick_mcp.py
-│   │   │   ├── ngspice_mcp.py
-│   │   │   ├── kicad_mcp.py
-│   │   │   └── pbr_generator_mcp.py
-│   │   └── scripts/          # Node.js-based tools
-│   │       ├── mcp-blender-client.js
-│   │       ├── mcp-ws-relay.js
-│   │       └── package.json
-│   ├── mcp-logs/            # Supervisord logs
-│   └── setup-workspace.sh   # Workspace initialization
-├── workspace/               # User workspace
+│   │   ├── mcp.json          # [Source] MCP tool definitions
+│   │   ├── mcp-tools/        # [Source] Python-based MCP tools
+│   │   └── scripts/          # [Source] Node.js-based tools
+│   ├── mcp-logs/             # Supervisord logs
+│   └── setup-workspace.sh    # Workspace initialization script
+│
+├── workspace/                # [User Workspace] (Mounted Volume)
+│   ├── .mcp.json             # Copied from /app/core-assets by setup script
+│   ├── mcp-tools/            # Copied from /app/core-assets
+│   ├── scripts/              # Copied from /app/core-assets
+│   ├── node_modules/         # claude-flow installed here
+│   └── ...                   # User-generated files and projects
+│
 ├── etc/
 │   └── supervisor/
 │       └── conf.d/
 │           └── supervisord.conf
+│
 └── home/
     └── dev/                # User home directory
         ├── .deno/
