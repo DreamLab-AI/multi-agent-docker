@@ -1,7 +1,5 @@
 # Stage 0 – CUDA + cuDNN (official NVIDIA image)
-# NOTE: The original tag '12.9.0' is not available on Docker Hub.
-# Using the latest available tag for Ubuntu 24.04 as of late 2024.
-FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu24.04 AS base
+FROM nvidia/cuda:12.9.1-devel-ubuntu24.04 AS base
 
 ################################################################################
 # Stage 1 – OS deps, Python 3.12 & 3.13 venvs, Rust, Node, ML stack, WasmEdge, Blender
@@ -22,7 +20,7 @@ WORKDIR $APP_HOME
 # Add any dependencies needed to run Blender and its Python environment.
 # wget and other utilities are for downloading and extracting Blender.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+    apt-get install -y --no-install-recommends --allow-unauthenticated \
     ca-certificates curl gnupg software-properties-common
 # Add Docker's official GPG key
 RUN install -m 0755 -d /etc/apt/keyrings && \
@@ -40,213 +38,121 @@ RUN add-apt-repository -y ppa:deadsnakes/ppa && \
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 # Install all packages including network utilities
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+    apt-get install -y --no-install-recommends --allow-unauthenticated \
       wget libxi6 libxxf86vm1 libxfixes3 libxrender1 \
       build-essential clang git pkg-config libssl-dev \
       lsb-release shellcheck hyperfine openssh-client tmux sudo \
       docker-ce docker-ce-cli containerd.io unzip 7zip texlive-full latexmk chktex \
-      # Network utilities for debugging
       iputils-ping netcat-openbsd net-tools dnsutils traceroute tcpdump nmap \
       iproute2 iptables curl wget telnet mtr-tiny \
-      # SQLite dependencies for claude-flow
       sqlite3 libsqlite3-dev \
-      # Additional Blender dependencies for headless operation
       libgl1 libglu1-mesa libglib2.0-0 libsm6 libxext6 \
       libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 \
       supervisor \
-      # Python, Node, and GPU/Wasm dependencies
       python3.12 python3.12-venv python3.12-dev \
       nodejs \
       jq \
       libvulkan1 vulkan-tools ocl-icd-libopencl1 && \
     rm -rf /var/lib/apt/lists/* && \
-    # Linters
     wget -O /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 && \
     chmod +x /usr/local/bin/hadolint
 
-# 2. Set PYTHONPATH
-ENV PYTHONPATH="${APP_HOME}"
+# 3. Create a non-root user
+RUN useradd -m -s /bin/bash dev && \
+    echo "dev:dev" | chpasswd && \
+    adduser dev sudo
 
-# 3. Copy essential project files
-# We no longer copy the Blender addon.
-# COPY addon.py ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/addon/__init__.py
-COPY entrypoint.sh /
-RUN chmod +x /entrypoint.sh
+# 4. Set up Python environments
+# Create a virtual environment for Python 3.12
+RUN python3.12 -m venv /opt/venv312
+# Create a virtual environment for Python 3.13
+# RUN python3.13 -m venv /opt/venv313
 
-# ---------- Create Python virtual environment ----------
-RUN python3.12 -m venv /opt/venv312 && \
-    /opt/venv312/bin/pip install --upgrade pip wheel setuptools
+# Set the PATH to include the venv's bin directory
+ENV PATH="/opt/venv312/bin:$PATH"
 
-# ---------- 2D/3D TOOLING ADDITIONS ----------
+# 5. Install Graphics and 3D Libraries
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    # Foundational 2D Tools
+    apt-get install -y --no-install-recommends --allow-unauthenticated \
     imagemagick \
     inkscape \
     ffmpeg \
-    # Photogrammetry & Reconstruction Tools
     colmap \
-    # Meshroom (AliceVision) dependencies
     libpng-dev libjpeg-dev libtiff-dev libopenexr-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Meshroom (AliceVision) from release binary for simplicity
-# RUN wget "https://www.fosshub.com/Meshroom.html?dwl=Meshroom-2023.3.0-linux.tar.gz" -O meshroom.tar.gz && \
-#     tar -xzf meshroom.tar.gz -C /opt && \
-#     rm meshroom.tar.gz
-# ENV PATH="/opt/Meshroom-2023.3.0/bin:${PATH}"
-
-# ---------- Tessellating PBR Generator Integration ----------
-RUN git clone https://github.com/jjohare/tessellating-pbr-generator.git /opt/tessellating-pbr-generator && \
-    /opt/venv312/bin/pip install --no-cache-dir -r /opt/tessellating-pbr-generator/requirements.txt
-
-# ---------- EDA & CIRCUIT DESIGN TOOLING ADDITIONS ----------
-# Install KiCad from PPA (version 9.0)
+# 6. Install EDA (Electronic Design Automation) Tools
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends kicad && \
+    apt-get install -y --no-install-recommends --allow-unauthenticated \
+    kicad \
+    ngspice \
+    libngspice0 && \
     rm -rf /var/lib/apt/lists/*
 
+# 7. Set up Deno
+# Install Deno
+RUN curl -fsSL https://deno.land/x/install/install.sh | sh
+# Add Deno to the PATH for all users
+ENV DENO_INSTALL="/root/.deno"
+ENV PATH="$DENO_INSTALL/bin:$PATH"
 
-# ---------- Install OSS CAD Suite for comprehensive EDA tools ----------
-# This provides Yosys, nextpnr, iverilog, gtkwave, ngspice and other tools
-RUN wget https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2024-04-17/oss-cad-suite-linux-x64-20240417.tgz -O oss-cad-suite.tgz && \
-    mkdir -p /opt/oss-cad-suite && \
-    tar -xzf oss-cad-suite.tgz -C /opt/oss-cad-suite --strip-components=1 && \
-    rm oss-cad-suite.tgz
+# 8. Copy Application Files
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+COPY setup-workspace.sh /app/setup-workspace.sh
+RUN chmod +x /app/setup-workspace.sh
 
-# ---------- Additional EDA Tools for AI Circuit Design ----------
-# Install more comprehensive circuit design tools
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    # Circuit analysis and optimization tools
-    octave \
-    python3-numpy python3-scipy python3-matplotlib \
-    # Documentation and visualization
-    graphviz \
-    # Build tools for custom EDA software
-    cmake ninja-build && \
-    rm -rf /var/lib/apt/lists/*
-
-# Install additional Python packages for circuit analysis in venv312
-RUN /opt/venv312/bin/pip install --no-cache-dir \
-    schemdraw \
-    PySpice \
-    scikit-rf \
-    lcapy \
-    ahkab \
-    pyltspice \
-    pycircuit
-
-# ---------- Install global CLI tools with specific versions ----------
-# We install better-sqlite3 first and build it from source to ensure
-# the native bindings are compiled for the correct environment.
-RUN npm install -g better-sqlite3 --build-from-source
-
+# 9. Install Node.js packages
+# Install global Node.js packages
 RUN npm install -g \
     gltf-pipeline \
     claude-flow@alpha \
     ruv-swarm@latest \
-    @anthropic-ai/claude-code@latest \
     @google/gemini-cli@latest \
     @openai/codex@latest && \
+    # Install claude-code separately to avoid potential npm conflicts
+    npm install -g @anthropic-ai/claude-code@latest && \
     npm install -g sqlite3 --unsafe-perm
 
 # ---------- Install Python ML & AI libraries into the 3.12 venv ----------
 # Copy requirements file and install dependencies to leverage Docker layer caching.
+# Note: PyTorch is installed separately to ensure the correct CUDA-enabled version is used.
 COPY requirements.txt .
 RUN /opt/venv312/bin/pip install --no-cache-dir --retries 10 --timeout 60 -r requirements.txt
 
-# Install the Modular MAX runtime last. As a pre-release, it's best
+# Install pre-release packages like 'modular' separately. This ensures that they are
 # installed on its own to avoid influencing the resolution of stable packages.
 RUN /opt/venv312/bin/pip install --no-cache-dir --retries 10 --timeout 60 --pre modular
+
+# Install PyTorch with CUDA support
+RUN /opt/venv312/bin/pip install --no-cache-dir --retries 10 --timeout 60 \
+    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
 # ---------- Rust tool-chain (AVX‑512) ----------
 ENV PATH="/root/.cargo/bin:${PATH}"
 # Update certificates and install Rust with retry logic
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates && \
-    update-ca-certificates && \
-    for i in 1 2 3; do \
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile default && break || \
-        echo "Rust installation attempt $i failed, retrying..." && sleep 5; \
-    done && \
-    echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> /etc/profile.d/rust.sh && \
-    . "$HOME/.cargo/env" && \
-    cargo install cargo-edit
-ENV RUSTFLAGS="-C target-cpu=skylake-avx512 -C target-feature=+avx2,+avx512f,+avx512bw,+avx512dq"
+RUN apt-get update && apt-get install -y ca-certificates && \
+    for i in 1 2 3; do curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && break || sleep 5; done
 
-# ---------- Install uv (fast python package manager) and uvx ----------
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
-    echo 'export PATH="/root/.local/bin:$PATH"' >> /etc/profile.d/uv.sh && \
-    # Verify uvx is installed and working
-    /root/.local/bin/uv --version && \
-    /root/.local/bin/uvx --version
-
-# ---------- Install Deno ----------
-RUN curl -fsSL https://deno.land/x/install/install.sh | sh
-ENV DENO_INSTALL="/root/.deno"
-ENV PATH="$DENO_INSTALL/bin:$PATH"
-
-# ---------- GPU‑accelerated Wasm stack (WasmEdge) ----------
+# ---------- WasmEdge (with OpenVINO backend) ----------
 RUN curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install.sh | \
-    bash -s -- -p /usr/local --plugins wasi_nn-openvino && ldconfig
+    bash -s -- -p /usr/local --plugins wasi_nn-openvino && \
+    ldconfig
 
-# ---------- OpenVINO from official APT repository ----------
-RUN wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | \
-    gpg --dearmor --output /etc/apt/trusted.gpg.d/intel.gpg && \
-    echo "deb https://apt.repos.intel.com/openvino ubuntu24 main" > /etc/apt/sources.list.d/intel-openvino.list && \
-    apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openvino-2025.2.0
-
-################################################################################
-# Stage 2 – Non‑root user, health‑check, env placeholders
-################################################################################
-ARG UID=1000
-ARG GID=1000
-# Remove the existing ubuntu user and replace it with the dev user
-# This ensures there's no UID conflict and the dev user is properly used
-RUN (id ubuntu &>/dev/null && userdel -r ubuntu) || true && \
-    groupadd -g ${GID} dev && \
-    useradd -m -s /bin/bash -u ${UID} -g ${GID} dev && \
-    # Add dev user to the docker and sudo groups
-    usermod -aG docker,sudo dev && \
-    # Allow passwordless sudo for the dev user
-    echo "dev ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev && chmod 0440 /etc/sudoers.d/dev && \
-    # Fix ownership of npm global modules so dev user can write to them
-    chown -R dev:dev /usr/lib/node_modules && \
-    # Create npm global directory for dev user
-    mkdir -p /home/dev/.npm-global && \
-    chown -R dev:dev /home/dev/.npm-global && \
-    # Create python symlink for convenience
-    ln -s /usr/bin/python3.12 /usr/local/bin/python && \
-    # Create workspace directories with proper ownership
-    mkdir -p /workspace /workspace/ext/src /workspace/logs /workspace/.claude /workspace/.mcp /workspace/memory /workspace/.supervisor && \
-    chown -R dev:dev /workspace && \
-    # Copy and configure uv for dev user
-    cp -r /root/.local /home/dev/ && \
-    chown -R dev:dev /home/dev/.local && \
-    # Copy and configure Deno for dev user
-    cp -r /root/.deno /home/dev/ && \
-    chown -R dev:dev /home/dev/.deno
-
-
-# Create log directory for supervisord and give dev user ownership
-RUN mkdir -p /app/mcp-logs && chown -R dev:dev /app/mcp-logs
-
+# 10. Switch to the dev user
 USER dev
 WORKDIR /workspace
-COPY --chown=dev:dev core-assets/mcp.json /app/core-assets/mcp.json
-COPY --chown=dev:dev core-assets/scripts/ /app/core-assets/scripts/
-COPY --chown=dev:dev core-assets/mcp-tools/ /app/core-assets/mcp-tools/
-COPY --chown=dev:dev setup-workspace.sh /app/setup-workspace.sh
-RUN chmod +x /app/core-assets/mcp-tools/*.py && \
-    chmod +x /app/setup-workspace.sh
 
+# Copy core assets and set permissions
+USER root
+COPY --chown=dev:dev core-assets/ /app/core-assets/
 # Install Node.js dependencies for all scripts
 USER root
 RUN cd /app/core-assets/scripts && npm install && chown -R dev:dev /app/core-assets/scripts/node_modules
 USER dev
 
+# Copy documentation and configuration files
+USER root
 COPY README.md .
 COPY AGENT-BRIEFING.md .
 
@@ -254,22 +160,16 @@ COPY AGENT-BRIEFING.md .
 RUN git config --global user.email "agent@multi-agent-docker.com" && \
     git config --global user.name "Development Agent"
 
-# Configure environment for the dev user.
-# This ensures that all tools (Deno, uv, npm globals) are correctly in the PATH
-# for both interactive shells and scripts.
-ENV DENO_INSTALL="/home/dev/.deno"
-ENV NPM_CONFIG_PREFIX="/home/dev/.npm-global"
-ENV PATH="/home/dev/.deno/bin:/home/dev/.local/bin:/home/dev/.npm-global/bin:/opt/oss-cad-suite/bin:/opt/venv312/bin:${PATH}"
-
-# Runtime placeholders
-ENV WASMEDGE_PLUGIN_PATH="/usr/local/lib/wasmedge"
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-  CMD ["sh", "-c", "command -v claude-flow >/dev/null"] || exit 1
-
-# Copy supervisor config just before entrypoint
+# 11. Final Setup
+# Copy supervisord config
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Start via entrypoint.sh which handles all services including Blender MCP
+# Set the entrypoint
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["--interactive"]
+
+# Default command to start supervisord
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+
+# Healthcheck to verify claude-flow is installed
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
+  CMD ["sh", "-c", "command -v claude-flow >/dev/null"] || exit 1

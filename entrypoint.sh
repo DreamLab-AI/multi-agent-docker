@@ -52,7 +52,7 @@ if [ "$1" = "--interactive" ]; then
     if [ -z "$(ls -A /workspace)" ]; then
         echo "💡 Your workspace is empty. Run '/app/setup-workspace.sh' to initialize it."
     fi
-    exec bash -l
+    su - dev
 else
     echo "--- Running command: $@ ---"
     exec "$@"
