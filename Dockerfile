@@ -71,10 +71,7 @@ ENV PYTHONPATH="${APP_HOME}"
 # 3. Copy essential project files
 # We no longer copy the Blender addon.
 # COPY addon.py ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/addon/__init__.py
-COPY addon.py $APP_HOME/
-COPY keep_alive.py $APP_HOME/
 COPY entrypoint.sh /
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 RUN chmod +x /entrypoint.sh
 
 # ---------- Create Python virtual environments & install global node packages ----------
@@ -181,6 +178,11 @@ ENV RUSTFLAGS="-C target-cpu=skylake-avx512 -C target-feature=+avx2,+avx512f,+av
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     echo 'export PATH="/root/.local/bin:$PATH"' >> /etc/profile.d/uv.sh
 
+# ---------- Install Deno ----------
+RUN curl -fsSL https://deno.land/x/install/install.sh | sh && \
+    echo 'export DENO_INSTALL="/root/.deno"' >> /etc/profile.d/deno.sh && \
+    echo 'export PATH="$DENO_INSTALL/bin:$PATH"' >> /etc/profile.d/deno.sh
+
 # ---------- GPU‑accelerated Wasm stack (WasmEdge) ----------
 RUN curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install.sh | \
     bash -s -- -p /usr/local --plugins wasi_nn-openvino && ldconfig
@@ -237,15 +239,15 @@ RUN chmod +x /app/mcp-tools/*.py && \
     chmod +x /app/setup-workspace.sh
 
 # Add package.json and install dependencies for the WS bridge
+USER root
 RUN echo '{"name": "mcp-ws-bridge", "version": "1.0.0", "dependencies": {"ws": "latest"}}' > /app/package.json
 
 # Install relay dependencies as root, then give ownership to dev
-USER root
 RUN cd /app && npm install && chown -R dev:dev /app
 USER dev
 
 COPY README.md .
-COPY CLAUDE-README.md .
+COPY SWARM-BRIEFING.md .
 
 # Configure git for the dev user
 RUN git config --global user.email "swarm@dreamlab-ai.com" && \
@@ -259,6 +261,9 @@ ENV WASMEDGE_PLUGIN_PATH="/usr/local/lib/wasmedge"
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD ["sh", "-c", "command -v claude >/dev/null && command -v claude-flow >/dev/null"] || exit 1
+
+# Copy supervisor config just before entrypoint
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Start via entrypoint.sh which handles all services including Blender MCP
 ENTRYPOINT ["/entrypoint.sh"]

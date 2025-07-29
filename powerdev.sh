@@ -208,7 +208,7 @@ start() {
   done
 
   echo "Starting powerdev services..."
-  docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" $profiles up -d powerdev
+  docker-compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" $profiles up -d
 
   echo ""
   echo "Services started! Waiting for health checks..."
@@ -227,7 +227,7 @@ start() {
   fi
 
   # Automatically enter the main container shell
-  shell main
+  shell
 }
 
 # ---- Stop command ---------------------

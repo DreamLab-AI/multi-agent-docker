@@ -5,20 +5,16 @@ set -e
 echo "🚀 Initializing new PowerDev workspace..."
 
 # 1. Check if workspace is already initialized
-if [ -d ".claude" ]; then
+if [ -d ".claude" ] && [ "$1" != "--force" ]; then
     echo "⚠️ Workspace appears to be already set up. Use --force to re-initialize."
-    if [ "$1" != "--force" ]; then
-        exit 0
-    fi
-    echo "Forcing re-initialization..."
-    rm -rf .claude .roo .mcp.json mcp-tools mcp-blender-client.js
+    exit 0
 fi
 
 # 2. Copy core assets from the image into the workspace
 echo "📂 Copying core assets into workspace..."
 cp -r /app/core-assets/claude-config/. ./.claude/
 cp -r /app/core-assets/roo-config/. ./.roo/
-cp -r /app/core-assets/mcp-tools/. ./mcp-tools/
+cp -r /app/mcp-tools/. ./mcp-tools/
 cp /app/core-assets/scripts/mcp-blender-client.js .
 cp /app/core-assets/mcp.json ./.mcp.json
 echo "✅ Core assets copied."
@@ -37,7 +33,7 @@ npx claude-flow@alpha mcp setup --auto-permissions --87-tools
 # 5. Initialize MCP servers based on the copied .mcp.json
 echo "--------------------------------------------------"
 echo "🔌 Initializing MCP servers from .mcp.json..."
-# This is now handled automatically by claude-flow when it starts
+npx claude-flow@alpha mcp init --file ./.mcp.json
 
 echo "--------------------------------------------------"
 echo "🎉 Workspace setup complete!"

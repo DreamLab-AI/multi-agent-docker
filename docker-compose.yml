@@ -71,7 +71,6 @@ services:
       - docker_ragflow
     extra_hosts:
       - "host.docker.internal:host-gateway"
-      - "blender-host:192.168.0.216"  # Direct mapping for Blender MCP server
 
   # Optional: Claude Flow standalone service
   claude-flow:
@@ -86,21 +85,6 @@ services:
       - docker_ragflow
     profiles:
       - standalone
-
-  # Rust container that connects to the powerdev MCP
-  logseq_spring_thing_webxr:
-    image: rust:latest # Replace with your actual Rust image
-    container_name: logseq_spring_thing_webxr
-    environment:
-      - CLAUDE_FLOW_HOST=powerdev
-      - CLAUDE_FLOW_PORT=3000
-      - RUST_LOG=info
-    depends_on:
-      powerdev:
-        condition: service_healthy
-    networks:
-      - docker_ragflow
-    restart: unless-stopped
 
 networks:
   docker_ragflow:

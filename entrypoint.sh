@@ -10,6 +10,8 @@ Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset &
 export DISPLAY=:99
 sleep 2
 
+# Ensure the supervisor directory exists
+mkdir -p /workspace/.supervisor
 # Start MCP Servers using supervisor
 echo "--- Starting MCP Servers with Supervisor ---"
 supervisord -c /etc/supervisor/conf.d/supervisord.conf &
@@ -22,8 +24,8 @@ sleep 2
 cat >> /home/dev/.bashrc << 'EOF'
 
 # MCP Server Management
-alias mcp-status='supervisorctl status'
-alias mcp-restart='supervisorctl restart all'
+alias mcp-status='supervisorctl -c /etc/supervisor/conf.d/supervisord.conf status'
+alias mcp-restart='supervisorctl -c /etc/supervisor/conf.d/supervisord.conf restart all'
 alias mcp-logs='tail -f /app/mcp-logs/*.log'
 alias mcp-test-blender='nc -zv localhost 9876'
 alias mcp-test-revit='nc -zv localhost 8080'
