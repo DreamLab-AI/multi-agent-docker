@@ -24,6 +24,7 @@ __pycache__/
 /dist/
 /build/
 *.egg-info/
+gui-based-tools-docker/blender-4.5.1-linux-x64.tar.xz
 
 # Log files
 *.log
