@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y \
     gnupg \
     software-properties-common \
     git \
+    xz-utils \
     --no-install-recommends && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
@@ -30,18 +31,25 @@ RUN wget -O /etc/apt/keyrings/qgis-archive-keyring.gpg https://download.qgis.org
 RUN echo "deb [signed-by=/etc/apt/keyrings/qgis-archive-keyring.gpg] https://qgis.org/ubuntu $(lsb_release -cs) main" > /etc/apt/sources.list.d/qgis.list
 RUN apt-get update && apt-get install -y qgis qgis-plugin-grass
 
+# Install Blender 4.5.1 from tar archive
+COPY blender-4.5.1-linux-x64.tar.xz /tmp/blender-4.5.1-linux-x64.tar.xz
+RUN cd /opt && \
+    tar -xf /tmp/blender-4.5.1-linux-x64.tar.xz && \
+    rm /tmp/blender-4.5.1-linux-x64.tar.xz && \
+    ln -s /opt/blender-4.5.1-linux-x64 /opt/blender-4.5
+
 # Create a non-root user for security
 RUN useradd -ms /bin/bash blender
 
-# Create directories for Blender as root
-RUN mkdir -p /home/blender/.config/blender/4.5/scripts/addons
+# Create directories for Blender as root (use version-agnostic approach)
+RUN mkdir -p /home/blender/.config/blender
 
-# Copy Blender binaries, addon, and startup script as root
-COPY blender45-binaries-and-mcp-addon /home/blender/blender-4.5
-COPY blender-docker/addon.py /home/blender/.config/blender/4.5/scripts/addons/addon.py
-COPY blender-docker/autostart.py /home/blender/autostart.py
-COPY blender-docker/startup.sh /home/blender/startup.sh
-COPY blender-docker/xstartup /home/blender/.vnc/xstartup
+# Copy Blender addon and startup scripts as root
+# We'll create the version-specific directory and install the addon at runtime
+COPY addon.py /home/blender/addon.py
+COPY autostart.py /home/blender/autostart.py
+COPY startup.sh /home/blender/startup.sh
+COPY xstartup /home/blender/.vnc/xstartup
 
 # Install QGIS MCP plugin
 RUN mkdir -p /home/blender/.local/share/QGIS/QGIS3/profiles/default/python/plugins
@@ -67,12 +75,14 @@ WORKDIR /home/blender
 # Install uv
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install PBR Generator Python dependencies
-RUN /home/blender/.local/bin/uv pip install -r /opt/tessellating-pbr-generator/requirements.txt
+# Install PBR Generator Python dependencies (switch to root for system-wide installation)
+USER root
+RUN /home/blender/.local/bin/uv pip install --system -r /opt/tessellating-pbr-generator/requirements.txt
+USER blender
 
-# Set environment variables for Blender, X server, and uv
+# Set environment variables for X server, uv, and Blender
 ENV DISPLAY=:1
-ENV PATH="/home/blender/.cargo/bin:/home/blender/blender-4.5:${PATH}"
+ENV PATH="/opt/blender-4.5/blender:/home/blender/.cargo/bin:${PATH}"
 
 # Expose the VNC port
 EXPOSE 5901

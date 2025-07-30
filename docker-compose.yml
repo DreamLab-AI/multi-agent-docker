@@ -1,4 +1,49 @@
 services:
+  gui-tools-service:
+    build:
+      context: gui-based-tools-docker
+      dockerfile: Dockerfile
+    image: gui-tools-docker:latest
+    container_name: gui-tools-container
+    hostname: gui-tools-service
+
+    # GPU support for graphics-intensive work
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    environment:
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=9876
+      - QGIS_MCP_HOST=0.0.0.0
+      - QGIS_MCP_PORT=9877
+      - PBR_MCP_HOST=0.0.0.0
+      - PBR_MCP_PORT=9878
+
+    ports:
+      - "5901:5901"   # VNC port
+      - "9876:9876"   # MCP Blender port
+      - "9877:9877"   # MCP QGIS port
+      - "9878:9878"   # MCP PBR Generator port
+
+    # Health check ensures all three services are ready
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 9876 && nc -z localhost 9877 && nc -z localhost 9878"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+    # Restart policy
+    restart: unless-stopped
+
+    networks:
+      - docker_ragflow
+
   multi-agent:
     build:
       context: .
@@ -64,12 +109,17 @@ services:
       retries: 5
       start_period: 30s
 
+
     # Restart policy
     restart: unless-stopped
 
+    networks:
+      - docker_ragflow
+
 networks:
-  default:
-    driver: bridge
+  docker_ragflow:
+    name: docker_ragflow
+    external: true
 
 volumes:
   workspace:

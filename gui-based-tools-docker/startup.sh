@@ -24,8 +24,16 @@ echo "--- Starting XFCE desktop ---"
 startxfce4 &
 sleep 3
 
+echo "--- Installing Blender MCP addon ---"
+# Get Blender version and create appropriate addon directory
+BLENDER_VERSION=$(/opt/blender-4.5/blender --version | head -n1 | grep -oP '(?<=Blender )\d+\.\d+')
+ADDON_DIR="/home/blender/.config/blender/${BLENDER_VERSION}/scripts/addons"
+mkdir -p "$ADDON_DIR"
+cp /home/blender/addon.py "$ADDON_DIR/addon.py"
+echo "Blender MCP addon installed for version $BLENDER_VERSION"
+
 echo "--- Starting Blender ---"
-/home/blender/blender-4.5/blender --python /home/blender/autostart.py &
+/opt/blender-4.5/blender --python /home/blender/autostart.py &
 sleep 3
 
 echo "--- Starting QGIS ---"
