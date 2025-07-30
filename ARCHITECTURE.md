@@ -36,9 +36,10 @@ graph TB
         end
     end
 
-    subgraph "External Applications"
+    subgraph "External Applications (gui-tools-docker)"
         EXT_BLENDER[External Blender<br/>Port 9876]
         EXT_QGIS[External QGIS<br/>Port 9877]
+        EXT_PBR[PBR Generator Service<br/>Port 9878]
     end
 
     subgraph "External Control"
@@ -55,6 +56,7 @@ graph TB
 
     BLENDER_TOOL -.->|TCP| EXT_BLENDER
     QGIS_TOOL -.->|TCP| EXT_QGIS
+    PBR_TOOL -.->|TCP| EXT_PBR
 
     EXTERNAL_CLIENT -.->|WebSocket| WS_BRIDGE
 
@@ -124,15 +126,15 @@ graph LR
 
     BLEND -->|TCP Bridge| CF
     QGIS -->|TCP Bridge| CF
+    PBR -->|TCP Bridge| CF
     
     KICAD -->|stdout JSON| CF
     NGSPICE -->|stdout JSON| CF
-    PBR -->|stdout JSON| CF
 ```
 
 ### 3. Bridge Pattern for External Applications
 
-The Blender and QGIS tools implement a bridge pattern to connect Claude Flow (stdio) with external applications (TCP):
+The Blender, QGIS, and PBR Generator tools implement a bridge pattern to connect Claude Flow (stdio) with external applications (TCP):
 
 ```mermaid
 sequenceDiagram
@@ -252,7 +254,7 @@ The environment uses a two-part file structure to separate the immutable core sy
 
 1. **Process Isolation**: Each MCP tool runs as a separate process with limited permissions
 2. **User Permissions**: All tools run as the `dev` user, not root
-3. **Port Exposure**: Only necessary ports are exposed (3000, 3002, 9876, 9877)
+3. **Port Exposure**: Only necessary ports are exposed (3000, 3002, 9876, 9877, 9878)
 4. **External Connections**: Bridge tools validate and sanitize data before forwarding
 
 ## Performance Optimizations
@@ -282,7 +284,7 @@ The environment uses a two-part file structure to separate the immutable core sy
 | **qgis-mcp** | `qgis_mcp.py` | Geospatial analysis bridge to external QGIS |
 | **kicad-mcp** | `kicad_mcp.py` | Electronic design automation |
 | **ngspice-mcp** | `ngspice_mcp.py` | Circuit simulation |
-| **pbr-generator-mcp** | `pbr_generator_mcp.py` | PBR texture generation |
+| **pbr-generator-mcp** | `pbr_mcp_client.py` | PBR texture generation bridge to external service |
 
 ### Example Tool Structure
 

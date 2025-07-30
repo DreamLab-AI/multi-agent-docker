@@ -20,14 +20,16 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all
       - PYTHONUNBUFFERED=1
+      - BLENDER_HOST=gui-tools-service
+      - BLENDER_PORT=9876
+      - QGIS_HOST=gui-tools-service
+      - QGIS_PORT=9877
+      - PBR_HOST=gui-tools-service
+      - PBR_PORT=9878
 
     ports:
       - "3000:3000"    # Claude Flow UI
-      - "3002:3002"    # Claude Flow MCP Server
-      - "3005:3005"    # Additional services
-      - "5173:5173"    # Vite dev server
-      - "9876:9876"    # Blender MCP Server
-      - "9877:9877"    # QGIS MCP Server
+      - "3002:3002"    # Claude Flow MCP WebSocket Bridge
 
     volumes:
       - ./workspace:/workspace

@@ -8,12 +8,15 @@ services:
     ports:
       - "5901:5901"   # VNC port
       - "9876:9876"   # MCP Blender port
-      - "9877:9877"   # MCP QGIS port (if QGIS is in same container)
+      - "9877:9877"   # MCP QGIS port
+      - "9878:9878"   # MCP PBR Generator port
     environment:
       - MCP_HOST=0.0.0.0
       - MCP_PORT=9876
       - QGIS_MCP_HOST=0.0.0.0
       - QGIS_MCP_PORT=9877
+      - PBR_MCP_HOST=0.0.0.0
+      - PBR_MCP_PORT=9878
     deploy:
       resources:
         reservations:
@@ -39,6 +42,8 @@ services:
       - BLENDER_PORT=9876
       - QGIS_HOST=blender_desktop
       - QGIS_PORT=9877
+      - PBR_HOST=blender_desktop
+      - PBR_PORT=9878
       # Add any other multi-agent-docker specific env vars
     volumes:
       - workspace:/workspace
@@ -55,7 +60,15 @@ services:
           echo 'Waiting for Blender MCP on port 9876...'
           sleep 2
         done
-        echo 'Blender MCP is ready!'
+        until nc -zv blender_desktop 9877; do
+          echo 'Waiting for QGIS MCP on port 9877...'
+          sleep 2
+        done
+        until nc -zv blender_desktop 9878; do
+          echo 'Waiting for PBR MCP on port 9878...'
+          sleep 2
+        done
+        echo 'All MCP services are ready!'
         
         # Source the MCP environment setup
         source /workspace/blender-docker/setup-mcp-env.sh

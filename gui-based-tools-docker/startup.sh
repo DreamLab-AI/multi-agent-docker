@@ -32,6 +32,10 @@ echo "--- Starting QGIS ---"
 qgis &
 sleep 3
 
+echo "--- Starting PBR Generator MCP Server ---"
+python3 /opt/tessellating-pbr-generator/pbr_mcp_server.py &
+sleep 3
+
 echo "--- Starting x11vnc ---"
 x11vnc -display :1 -nopw -forever -xkb -listen 0.0.0.0 -rfbport 5901 -verbose &
 VNC_PID=$!

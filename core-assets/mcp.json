@@ -37,7 +37,7 @@
     },
     "pbr-generator-mcp": {
       "command": "python3",
-      "args": ["-u", "./mcp-tools/pbr_generator_mcp.py"],
+      "args": ["-u", "./mcp-tools/pbr_mcp_client.py"],
       "type": "stdio"
     }
   }

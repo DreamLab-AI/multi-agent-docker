@@ -8,12 +8,15 @@ services:
     ports:
       - "5901:5901"   # VNC port
       - "9876:9876"   # MCP Blender port
-      - "9877:9877"   # MCP QGIS port (if QGIS is in same container)
+      - "9877:9877"   # MCP QGIS port
+      - "9878:9878"   # MCP PBR Generator port
     environment:
       - MCP_HOST=0.0.0.0
       - MCP_PORT=9876
       - QGIS_MCP_HOST=0.0.0.0
       - QGIS_MCP_PORT=9877
+      - PBR_MCP_HOST=0.0.0.0
+      - PBR_MCP_PORT=9878
     deploy:
       resources:
         reservations:
@@ -24,7 +27,7 @@ services:
     networks:
       - ragflow_network
     healthcheck:
-      test: ["CMD", "nc", "-zv", "localhost", "9876"]
+      test: ["CMD-SHELL", "nc -z localhost 9876 && nc -z localhost 9877 && nc -z localhost 9878"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -40,6 +43,8 @@ services:
   #     - BLENDER_PORT=9876
   #     - QGIS_HOST=blender_desktop
   #     - QGIS_PORT=9877
+  #     - PBR_HOST=blender_desktop
+  #     - PBR_PORT=9878
   #   networks:
   #     - ragflow_network
   #   depends_on:

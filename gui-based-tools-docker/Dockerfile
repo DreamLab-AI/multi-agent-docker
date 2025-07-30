@@ -52,9 +52,13 @@ RUN set -x && \
     cp -r /tmp/qgis_mcp_modify1/qgis_mcp_plugin /home/blender/.local/share/QGIS/QGIS3/profiles/default/python/plugins/ && \
     rm -rf /tmp/qgis_mcp_modify1
 
+# Install PBR Generator
+COPY tessellating-pbr-generator /opt/tessellating-pbr-generator
+
 # Set permissions for the blender user's home directory as root
 RUN chmod +x /home/blender/startup.sh /home/blender/.vnc/xstartup
 RUN chown -R blender:blender /home/blender
+RUN chown -R blender:blender /opt/tessellating-pbr-generator
 
 # Switch to the non-root user
 USER blender
@@ -62,6 +66,9 @@ WORKDIR /home/blender
 
 # Install uv
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install PBR Generator Python dependencies
+RUN /home/blender/.local/bin/uv pip install -r /opt/tessellating-pbr-generator/requirements.txt
 
 # Set environment variables for Blender, X server, and uv
 ENV DISPLAY=:1
