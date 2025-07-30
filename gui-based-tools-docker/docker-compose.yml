@@ -1,0 +1,51 @@
+services:
+  blender:
+    build:
+      context: ..
+      dockerfile: blender-docker/Dockerfile
+    container_name: blender_desktop
+    hostname: blender_desktop
+    ports:
+      - "5901:5901"   # VNC port
+      - "9876:9876"   # MCP Blender port
+      - "9877:9877"   # MCP QGIS port (if QGIS is in same container)
+    environment:
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=9876
+      - QGIS_MCP_HOST=0.0.0.0
+      - QGIS_MCP_PORT=9877
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - ragflow_network
+    healthcheck:
+      test: ["CMD", "nc", "-zv", "localhost", "9876"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Claude agent container can be added here
+  # claude-agent:
+  #   image: <your-agent-image>
+  #   container_name: claude_agent
+  #   hostname: claude_agent
+  #   environment:
+  #     - BLENDER_HOST=blender_desktop
+  #     - BLENDER_PORT=9876
+  #     - QGIS_HOST=blender_desktop
+  #     - QGIS_PORT=9877
+  #   networks:
+  #     - ragflow_network
+  #   depends_on:
+  #     - blender
+
+networks:
+  ragflow_network:
+    name: docker_ragflow
+    external: true
