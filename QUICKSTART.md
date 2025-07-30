@@ -8,18 +8,16 @@ Get up and running with the Multi-Agent Docker Environment in under 5 minutes!
 # 1. Clone & enter directory
 git clone <repository-url> && cd multi-agent-docker
 
-# 2. Build & start
-docker-compose up -d --build
+# 2. Build & start using the helper script
+./multi-agent.sh build
+./multi-agent.sh start
 
-# 3. Enter container
-docker exec -it multi-agent-container /bin/bash
-
-# 4. Initialize workspace (inside container)
+# 3. Initialize workspace (automatic shell entry)
 /app/setup-workspace.sh
 
-# 5. Verify everything works
-mcp-status
-claude-flow mcp tools
+# 4. Verify everything works
+./mcp-helper.sh list-tools
+./mcp-helper.sh test-all
 ```
 
 ## 📋 Prerequisites Checklist
@@ -42,133 +40,161 @@ cd multi-agent-docker
 ### Step 2: Build and Start
 
 ```bash
-# Build the image and start the container
-docker-compose up -d --build
+# Build the image
+./multi-agent.sh build
 
-# Check if container is running
-docker ps | grep multi-agent-container
+# Start the container (automatically enters shell)
+./multi-agent.sh start
 ```
 
 Expected output:
 ```
-CONTAINER ID   IMAGE                    STATUS         PORTS                    NAMES
-xxxxxxxxxxxx   multi-agent-docker:latest   Up X minutes   3000/tcp, 3002/tcp...   multi-agent-container
+Container started! Waiting for health checks...
+Multi-Agent Container Status:
+=============================
+NAME                    IMAGE                       STATUS                   PORTS
+multi-agent-container   multi-agent-docker:latest   Up X seconds (healthy)   3000->3000/tcp, 3002->3002/tcp...
+
+Entering multi-agent container as 'dev' user...
+dev@xxxxxxxxxxxx:/workspace$
 ```
 
-### Step 3: Enter the Container
-
-```bash
-docker exec -it multi-agent-container /bin/bash
-```
-
-You should see a prompt like:
-```
-dev@multi-agent-container:/workspace$
-```
-
-### Step 4: Initialize Your Workspace
+### Step 3: Initialize Your Workspace
 
 ```bash
 /app/setup-workspace.sh
 ```
 
 This will:
-- ✅ Copy MCP configurations
-- ✅ Install Claude Flow
-- ✅ Register all MCP tools
-- ✅ Verify the setup
+- ✅ Copy MCP tools and helper scripts to workspace
+- ✅ Set proper executable permissions
+- ✅ Install Claude Flow locally
+- ✅ Update CLAUDE.md with tool knowledge
+- ✅ Verify all tools are working
 
-### Step 5: Verify Everything Works
+### Step 4: Test MCP Tools
 
 ```bash
-# Check background services
-mcp-status
+# List all available tools
+./mcp-helper.sh list-tools
 
-# List available tools
-claude-flow mcp tools
+# Test all tools automatically
+./mcp-helper.sh test-all
+
+# Test a specific tool (ImageMagick example)
+./mcp-helper.sh test-imagemagick
 ```
 
 ## 🎉 Success Indicators
 
 You know everything is working when:
 
-1. `mcp-status` shows:
+1. `./mcp-helper.sh list-tools` shows all 6 tools:
    ```
-   mcp-ws-bridge                    RUNNING   pid 123, uptime 0:05:00
+   ✅ imagemagick-mcp - Image manipulation and creation
+   ✅ blender-mcp - 3D modeling and rendering
+   ✅ qgis-mcp - Geospatial analysis
+   ✅ kicad-mcp - Electronic design automation
+   ✅ ngspice-mcp - Circuit simulation
+   ✅ pbr-generator-mcp - PBR texture generation
    ```
 
-2. `claude-flow mcp tools` lists tools including:
-   - imagemagick-mcp
-   - blender-mcp
-   - qgis-mcp
-   - kicad-mcp
-   - ngspice-mcp
-   - pbr-generator-mcp
+2. `./mcp-helper.sh test-all` passes all tests
 
 ## 🔥 Common First Tasks
 
 ### Test ImageMagick Tool
 
 ```bash
-# Create a test image
-echo '{"method": "create", "params": {"width": 200, "height": 100, "color": "gold", "output": "gold_bar.png"}}' | python3 ./mcp-tools/imagemagick_mcp.py
+# Quick test using helper
+./mcp-helper.sh test-imagemagick
 
-# Verify the output
-ls -l gold_bar.png
+# Manual test - create a golden square
+./mcp-helper.sh run-tool imagemagick-mcp '{"method": "create", "params": {"width": 200, "height": 200, "color": "gold", "output": "gold_square.png"}}'
 ```
 
-### Connect External Blender
-
-1. Start Blender with MCP server on port 9876
-2. Test connection:
-   ```bash
-   telnet localhost 9876
-   ```
-
-### Explore Available Tools
+### Test PBR Generator
 
 ```bash
-# Get detailed tool information
-claude-flow mcp tools --verbose
+# Generate a metal PBR texture set
+./mcp-helper.sh run-tool pbr-generator-mcp '{"material": "brushed_metal", "resolution": "1024x1024", "output_dir": "./pbr_textures"}'
+```
+
+### Test 3D Tools
+
+```bash
+# Connect to external Blender (if running on port 9876)
+./mcp-helper.sh run-tool blender-mcp '{"action": "status"}'
+
+# Test QGIS capabilities
+./mcp-helper.sh run-tool qgis-mcp '{"action": "info"}'
 ```
 
 ## ⚡ Quick Commands Reference
 
 | Command | Description |
 |---------|-------------|
-| `mcp-status` | Check service status |
-| `claude-flow mcp tools` | List all tools |
+| `./multi-agent.sh start` | Start container (auto-enters shell) |
+| `./multi-agent.sh shell` | Enter running container |
+| `./multi-agent.sh logs` | View container logs |
+| `./multi-agent.sh stop` | Stop container |
+| `./mcp-helper.sh list-tools` | List all MCP tools |
+| `./mcp-helper.sh test-all` | Test all tools |
+| `./mcp-helper.sh claude-instructions` | Get Claude usage guide |
 | `exit` | Leave container |
-| `docker exec -it multi-agent-container /bin/bash` | Re-enter container |
-| `docker-compose down` | Stop everything |
-| `docker-compose logs -f` | View logs |
 
 ## 🆘 Quick Fixes
 
-### "Connection refused" error
+### "Tool not available" error
 ```bash
-# Start supervisord manually
-sudo supervisord -c /etc/supervisor/conf.d/supervisord.conf
-```
-
-### "Tool not found" error
-```bash
-# Re-initialize tools
-claude-flow mcp init --file ./.mcp.json
+# Re-run setup with force flag
+/app/setup-workspace.sh --force
 ```
 
 ### "Permission denied" error
 ```bash
-# Fix ownership
+# Fix ownership (should be automatic now)
 sudo chown -R dev:dev /workspace
+```
+
+### "Helper script not found"
+```bash
+# Copy helper script manually
+cp /app/mcp-helper.sh ./
+chmod +x ./mcp-helper.sh
+```
+
+## 🎯 Working with Claude
+
+The setup automatically provides Claude with MCP tool knowledge. To use tools with Claude:
+
+```bash
+# Get instructions for Claude
+./mcp-helper.sh claude-instructions
+
+# Example task for Claude:
+# "Using the imagemagick-mcp tool, create a 300x300 blue gradient image"
+# "Using the pbr-generator-mcp tool, create realistic wood textures"
 ```
 
 ## 📚 Next Steps
 
 - Read the [Architecture Documentation](./ARCHITECTURE.md)
-- Explore the [Full README](./README.md)
-- Start building with MCP tools!
+- Explore the [Agent Briefing](./AGENT-BRIEFING.md) for Claude
+- Check out available [MCP Tools](#available-mcp-tools)
+- Start building with the multi-agent environment!
+
+## 🛠️ Available MCP Tools
+
+| Tool | Purpose | Example Use |
+|------|---------|-------------|
+| **imagemagick-mcp** | Image creation & manipulation | Create graphics, resize, apply effects |
+| **blender-mcp** | 3D modeling & rendering | Create 3D models, render scenes |
+| **qgis-mcp** | Geospatial analysis | Process maps, analyze geographic data |
+| **kicad-mcp** | Electronic design | Design PCBs, create schematics |
+| **ngspice-mcp** | Circuit simulation | Simulate electronic circuits |
+| **pbr-generator-mcp** | PBR texture creation | Generate realistic material textures |
 
 ---
 
-**Need help?** Check the [Troubleshooting Guide](./README.md#-troubleshooting) or open an issue!
+**Need help?** Use `./mcp-helper.sh claude-instructions` or check the [Architecture Guide](./ARCHITECTURE.md)!

@@ -1,0 +1,68 @@
+{
+  "material": {
+    "base_material": "wood_planks",
+    "style": "weathered oak barn wood with visible grain",
+    "properties": {
+      "color_palette": ["brown", "dark brown", "tan", "gray weathering"],
+      "surface_detail": "pronounced wood grain with knots and weathering",
+      "pattern": "vertical planks with gaps between boards"
+    }
+  },
+  "textures": {
+    "resolution": {
+      "width": 2048,
+      "height": 2048
+    },
+    "types": ["diffuse", "normal", "roughness", "height", "ao"],
+    "seamless": true,
+    "format": "png",
+    "quality": 95
+  },
+  "generation": {
+    "diffuse": {
+      "prompt_template": "Weathered oak wood planks texture, {style}, seamless vertical boards, realistic",
+      "guidance_scale": 7.5,
+      "steps": 50
+    },
+    "normal": {
+      "strength": 1.2,
+      "blur_radius": 1,
+      "invert_height": false
+    },
+    "roughness": {
+      "base_value": 0.7,
+      "variation": 0.2,
+      "invert": false,
+      "use_diffuse_luminance": true
+    },
+    "height": {
+      "depth_scale": 0.05,
+      "blur_radius": 1,
+      "use_ao": true
+    },
+    "ao": {
+      "radius": 4,
+      "intensity": 0.7
+    }
+  },
+  "tessellation": {
+    "enabled": true,
+    "method": "offset",
+    "blend_width": 48,
+    "corner_blend": true,
+    "preserve_features": ["vertical_lines"]
+  },
+  "output": {
+    "directory": "output/wood_planks",
+    "prefix": "wood_planks",
+    "create_preview": true,
+    "save_metadata": true
+  },
+  "api": {
+    "provider": "openai",
+    "model": "dall-e-3",
+    "api_key": "${OPENAI_API_KEY}",
+    "quality": "hd",
+    "style": "natural"
+  }
+}

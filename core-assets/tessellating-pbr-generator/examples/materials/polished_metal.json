@@ -1,0 +1,67 @@
+{
+  "material": {
+    "base_material": "polished_metal",
+    "style": "brushed stainless steel with subtle scratches",
+    "properties": {
+      "color_palette": ["silver", "chrome", "light gray"],
+      "surface_detail": "fine directional brushing with micro scratches",
+      "reflectivity": "high reflectivity with anisotropic highlights"
+    }
+  },
+  "textures": {
+    "resolution": {
+      "width": 2048,
+      "height": 2048
+    },
+    "types": ["diffuse", "normal", "roughness", "metallic", "height"],
+    "seamless": true,
+    "format": "png",
+    "quality": 95
+  },
+  "generation": {
+    "diffuse": {
+      "prompt_template": "Brushed stainless steel metal texture, {style}, seamless pattern, high quality",
+      "guidance_scale": 8.0,
+      "steps": 50
+    },
+    "normal": {
+      "strength": 0.3,
+      "blur_radius": 0,
+      "invert_height": false
+    },
+    "roughness": {
+      "base_value": 0.15,
+      "variation": 0.05,
+      "invert": false,
+      "directional": true,
+      "direction_angle": 90
+    },
+    "metallic": {
+      "base_value": 1.0,
+      "variation": 0.0
+    },
+    "height": {
+      "depth_scale": 0.02,
+      "blur_radius": 0
+    }
+  },
+  "tessellation": {
+    "enabled": true,
+    "method": "mirror",
+    "blend_width": 32,
+    "corner_blend": true
+  },
+  "output": {
+    "directory": "output/polished_metal",
+    "prefix": "polished_metal",
+    "create_preview": true,
+    "save_metadata": true
+  },
+  "api": {
+    "provider": "openai",
+    "model": "dall-e-3",
+    "api_key": "${OPENAI_API_KEY}",
+    "quality": "hd",
+    "style": "natural"
+  }
+}

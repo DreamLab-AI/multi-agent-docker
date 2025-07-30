@@ -1,0 +1,70 @@
+{
+  "material": {
+    "base_material": "fabric",
+    "style": "woven linen fabric with visible thread texture",
+    "properties": {
+      "color_palette": ["beige", "cream", "light brown"],
+      "surface_detail": "fine woven threads in plain weave pattern",
+      "texture_scale": "close-up fabric texture showing individual threads"
+    }
+  },
+  "textures": {
+    "resolution": {
+      "width": 2048,
+      "height": 2048
+    },
+    "types": ["diffuse", "normal", "roughness", "height", "ao"],
+    "seamless": true,
+    "format": "png",
+    "quality": 95
+  },
+  "generation": {
+    "diffuse": {
+      "prompt_template": "Woven linen fabric texture close-up, {style}, seamless pattern, high detail",
+      "guidance_scale": 8.0,
+      "steps": 50
+    },
+    "normal": {
+      "strength": 0.8,
+      "blur_radius": 0,
+      "invert_height": false,
+      "detail_preservation": "high"
+    },
+    "roughness": {
+      "base_value": 0.75,
+      "variation": 0.05,
+      "invert": false,
+      "uniform": true
+    },
+    "height": {
+      "depth_scale": 0.03,
+      "blur_radius": 0,
+      "preserve_detail": true
+    },
+    "ao": {
+      "radius": 2,
+      "intensity": 0.5,
+      "fine_detail": true
+    }
+  },
+  "tessellation": {
+    "enabled": true,
+    "method": "frequency",
+    "blend_width": 64,
+    "corner_blend": true,
+    "frequency_match": true
+  },
+  "output": {
+    "directory": "output/fabric",
+    "prefix": "fabric_linen",
+    "create_preview": true,
+    "save_metadata": true
+  },
+  "api": {
+    "provider": "openai",
+    "model": "dall-e-3",
+    "api_key": "${OPENAI_API_KEY}",
+    "quality": "hd",
+    "style": "natural"
+  }
+}

@@ -2,68 +2,81 @@
 # Unified setup script for a fresh PowerDev workspace.
 
 set -e
+
 echo "🚀 Initializing new PowerDev workspace..."
 
-# 1. Check if workspace is already initialized
-if [ -d ".claude" ] && [ "$1" != "--force" ]; then
+# 1. Force re-initialization if --force is used
+if [ -f "package.json" ] && [ "$1" != "--force" ]; then
     echo "⚠️ Workspace appears to be already set up. Use --force to re-initialize."
     exit 0
 fi
 
-# 2. Copy essential assets from the image into the workspace
-echo "📂 Copying essential assets into workspace..."
+# 2. Copy essential assets and helpers
+echo "📂 Copying essential assets and helper scripts into workspace..."
+mkdir -p ./mcp-tools/ ./scripts/
 cp -r /app/core-assets/mcp-tools/. ./mcp-tools/
 cp -r /app/core-assets/scripts/. ./scripts/
 cp /app/core-assets/mcp.json ./.mcp.json
-echo "✅ Essential assets copied."
+cp /app/mcp-helper.sh ./
 
-# 3. Install and initialize claude-flow
-echo "--------------------------------------------------"
-echo "📦 Installing claude-flow locally..."
-npm install claude-flow@alpha
-echo "🚀 Starting Claude Flow initialization..."
-echo "This will set up your agent environment."
-./node_modules/.bin/claude-flow init --force --hive-mind --neural-enhanced
+# Make all scripts executable
+echo "🔧 Setting script permissions..."
+chmod +x ./mcp-helper.sh
+find ./mcp-tools -name "*.py" -exec chmod +x {} \;
+find ./scripts -name "*.js" -exec chmod +x {} \;
+echo "✅ Assets copied and permissions set."
 
-# 4. Initialize MCP servers based on the copied .mcp.json
+# 3. Install local Node.js dependencies
 echo "--------------------------------------------------"
-echo "🔌 Initializing MCP servers from .mcp.json..."
-./node_modules/.bin/claude-flow mcp init --file ./.mcp.json || true
+echo "📦 Installing local Node.js dependencies..."
+if [ ! -f "package.json" ]; then
+    npm init -y > /dev/null 2>&1
+fi
+npm install claude-flow@alpha > /dev/null 2>&1
+echo "✅ Dependencies installed."
 
-# 5. Verify MCP servers are ready
+# 4. Update CLAUDE.md with MCP tool knowledge
 echo "--------------------------------------------------"
-echo "🔗 Verifying MCP servers and tools..."
+echo "🤖 Appending MCP tool knowledge to CLAUDE.md..."
+if [ ! -f "CLAUDE.md" ]; then
+    cp /app/AGENT-BRIEFING.md ./CLAUDE.md
+fi
+
+MCP_KNOWLEDGE_BLOCK="
+## 🛠️ MCP Tools Available
+
+**CRITICAL**: Use \`./mcp-helper.sh list-tools\` and \`./mcp-helper.sh run-tool <tool> '<json>'\`
+
+Available: imagemagick-mcp, blender-mcp, qgis-mcp, kicad-mcp, ngspice-mcp, pbr-generator-mcp
+"
+
+if ! grep -q "Multi-Agent Docker MCP Tools" "CLAUDE.md"; then
+    echo "$MCP_KNOWLEDGE_BLOCK" >> CLAUDE.md
+    echo "✅ Knowledge block added to CLAUDE.md."
+else
+    echo "✅ Knowledge block already exists in CLAUDE.md."
+fi
+
+# 5. Verify the environment is ready
+echo "--------------------------------------------------"
+echo "🔗 Verifying final environment state..."
 echo "Checking supervisord background services..."
-supervisorctl -c /etc/supervisor/conf.d/supervisord.conf status || echo "ℹ️  Supervisord may not be running yet. Start it with: sudo supervisord -c /etc/supervisor/conf.d/supervisord.conf"
-
-echo ""
-echo "Checking claude-flow tool availability..."
-# Use claude-flow to list tools and check if our key tools are registered.
-if ./node_modules/.bin/claude-flow mcp tools | grep -q "blender-mcp"; then
-    echo "✅ Blender MCP tool is registered with claude-flow."
+if supervisorctl -c /etc/supervisor/conf.d/supervisord.conf status | grep -q 'RUNNING'; then
+    echo "✅ Supervisord services are running."
 else
-    echo "⚠️ Blender MCP tool is NOT registered. Check .mcp.json."
-fi
-
-if ./node_modules/.bin/claude-flow mcp tools | grep -q "qgis-mcp"; then
-    echo "✅ QGIS MCP tool is registered with claude-flow."
-else
-    echo "⚠️ QGIS MCP tool is NOT registered. Check .mcp.json."
+    echo "⚠️ Supervisord services are not running correctly. Check logs."
 fi
 
 echo ""
-echo "💡 For these tools to work, ensure the external Blender and QGIS applications"
-echo "   with their MCP server plugins are running and accessible from the container."
+echo "Verifying MCP tool availability..."
+if ./mcp-helper.sh list-tools &> /dev/null; then
+    echo "✅ All MCP tools are registered and accessible via './mcp-helper.sh'."
+else
+    echo "❌ FAILED: Could not list MCP tools. Please check logs."
+fi
 
 echo "--------------------------------------------------"
 echo "🎉 Workspace setup complete!"
-echo
-echo "Next Steps:"
-echo "1. Grant permissions for this session:"
-echo "   claude --dangerously-skip-permissions"
-echo
-echo "2. Your custom MCP tools are now in ./mcp-tools/ and can be edited."
-echo "   The MCP server configuration is in ./.mcp.json."
-echo
-echo "You are ready to start working with Claude."
+echo "💡 Use './mcp-helper.sh help' to see available commands."
+echo "💡 Check 'CLAUDE.md' for detailed instructions on how to use the tools."
 echo "--------------------------------------------------"

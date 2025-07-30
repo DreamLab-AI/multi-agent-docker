@@ -174,8 +174,8 @@ start() {
   echo "  - Claude Flow UI: http://localhost:3000"
   echo "  - MCP WebSocket: ws://localhost:3002"
 
-  echo ""
-  echo "To enter the container, run: $0 shell"
+  # Automatically enter the shell
+  shell
 }
 
 # ---- Stop command ---------------------
@@ -206,8 +206,8 @@ logs() {
 
 # ---- Shell command ---------------------
 shell() {
-  echo "Entering multi-agent container..."
-  docker exec -it "$CONTAINER_NAME" /bin/bash
+  echo "Entering multi-agent container as 'dev' user..."
+  docker exec -it -u dev "$CONTAINER_NAME" /bin/bash
 }
 
 

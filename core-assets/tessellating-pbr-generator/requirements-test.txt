@@ -1,0 +1,25 @@
+# Testing requirements for PBR Generator
+
+# Core testing framework
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+pytest-xdist>=3.0.0  # For parallel test execution
+
+# Mocking and fixtures
+unittest-mock>=1.5.0
+
+# Additional testing utilities
+pytest-timeout>=2.1.0
+pytest-benchmark>=4.0.0
+
+# Code quality
+coverage>=7.0.0
+pytest-flake8>=1.1.0
+pytest-mypy>=0.10.0
+
+# Test data generation
+faker>=18.0.0
+
+# All main requirements
+-r requirements.txt

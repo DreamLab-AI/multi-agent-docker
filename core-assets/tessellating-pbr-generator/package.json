@@ -1,0 +1,25 @@
+{
+  "name": "tessellating-pbr-generator",
+  "version": "1.0.0",
+  "description": "Generate seamlessly tessellating PBR textures using generative AI",
+  "main": "main.py",
+  "scripts": {
+    "test": "python -m pytest tests/",
+    "generate": "python main.py"
+  },
+  "keywords": [
+    "pbr",
+    "texture",
+    "tessellation",
+    "ai",
+    "generator",
+    "seamless",
+    "tileable",
+    "python"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "python": ">=3.8.0"
+  }
+}

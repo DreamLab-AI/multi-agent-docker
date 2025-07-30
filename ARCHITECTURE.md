@@ -18,12 +18,12 @@ graph TB
             CLAUDE_FLOW[Claude Flow<br/>Tool Orchestrator]
 
             subgraph "Stdio-based Tools"
-                BLENDER_TOOL[Blender MCP Tool]
-                QGIS_TOOL[QGIS MCP Tool]
-                IMAGEMAGICK_TOOL[ImageMagick Tool]
-                NGSPICE_TOOL[NGSpice Tool]
-                KICAD_TOOL[KiCad Tool]
-                PBR_TOOL[PBR Generator Tool]
+                BLENDER_TOOL[Blender MCP Tool<br/>3D modeling & rendering]
+                QGIS_TOOL[QGIS MCP Tool<br/>Geospatial analysis]
+                IMAGEMAGICK_TOOL[ImageMagick Tool<br/>Image processing]
+                NGSPICE_TOOL[NGSpice Tool<br/>Circuit simulation]
+                KICAD_TOOL[KiCad Tool<br/>PCB design]
+                PBR_TOOL[PBR Generator Tool<br/>Texture generation]
             end
         end
 
@@ -70,9 +70,10 @@ graph TB
 
 #### Supervisord
 - **Purpose**: Manages long-running background services
-- **Managed Services**: Currently only the WebSocket Bridge
+- **Managed Services**: WebSocket Bridge (mcp-ws-relay)
 - **Configuration**: `/etc/supervisor/conf.d/supervisord.conf`
 - **Logs**: `/app/mcp-logs/`
+- **User Management**: Runs as `dev` user with proper socket permissions
 
 ```mermaid
 sequenceDiagram
@@ -103,23 +104,30 @@ graph LR
 
     subgraph "Tool Processes"
         direction TB
-        TOOL1[Tool Process 1]
-        TOOL2[Tool Process 2]
-        TOOL3[Tool Process N]
+        IMG[ImageMagick MCP<br/>Image Processing]
+        BLEND[Blender MCP<br/>3D Bridge]
+        QGIS[QGIS MCP<br/>GIS Bridge]
+        KICAD[KiCad MCP<br/>PCB Design]
+        NGSPICE[NGSpice MCP<br/>Circuit Sim]
+        PBR[PBR Generator<br/>Textures]
     end
 
-    CF -->|spawn| TOOL1
-    CF -->|spawn| TOOL2
-    CF -->|spawn| TOOL3
+    CF -->|spawn| IMG
+    CF -->|spawn| BLEND
+    CF -->|spawn| QGIS
+    CF -->|spawn| KICAD
+    CF -->|spawn| NGSPICE
+    CF -->|spawn| PBR
 
-    TOOL1 -->|stdout JSON| CF
-    CF -->|stdin JSON| TOOL1
+    IMG -->|stdout JSON| CF
+    CF -->|stdin JSON| IMG
 
-    TOOL2 -->|stdout JSON| CF
-    CF -->|stdin JSON| TOOL2
-
-    TOOL3 -->|stdout JSON| CF
-    CF -->|stdin JSON| TOOL3
+    BLEND -->|TCP Bridge| CF
+    QGIS -->|TCP Bridge| CF
+    
+    KICAD -->|stdout JSON| CF
+    NGSPICE -->|stdout JSON| CF
+    PBR -->|stdout JSON| CF
 ```
 
 ### 3. Bridge Pattern for External Applications
@@ -258,10 +266,23 @@ The environment uses a two-part file structure to separate the immutable core sy
 
 ### Adding New MCP Tools
 
-1. Create tool script in `/app/core-assets/mcp-tools/`
-2. Implement stdio JSON protocol
-3. Add tool definition to `.mcp.json`
-4. Tools are automatically available after workspace setup
+1. Create tool script in `/app/core-assets/mcp-tools/` (Python) or `/app/core-assets/scripts/` (Node.js)
+2. Implement stdio JSON protocol (see existing tools as examples)
+3. Add tool definition to `/app/core-assets/mcp.json`
+4. Make script executable and add `-u` flag for Python (unbuffered output)
+5. Run `/app/setup-workspace.sh --force` to update workspace
+6. Tools are automatically available via `./mcp-helper.sh`
+
+### Current MCP Tools
+
+| Tool | File | Purpose |
+|------|------|---------|
+| **imagemagick-mcp** | `imagemagick_mcp.py` | Image creation and manipulation |
+| **blender-mcp** | `mcp-blender-client.js` | 3D modeling bridge to external Blender |
+| **qgis-mcp** | `qgis_mcp.py` | Geospatial analysis bridge to external QGIS |
+| **kicad-mcp** | `kicad_mcp.py` | Electronic design automation |
+| **ngspice-mcp** | `ngspice_mcp.py` | Circuit simulation |
+| **pbr-generator-mcp** | `pbr_generator_mcp.py` | PBR texture generation |
 
 ### Example Tool Structure
 
@@ -313,11 +334,20 @@ supervisorctl -c /etc/supervisor/conf.d/supervisord.conf status
 # View supervisord logs
 tail -f /app/mcp-logs/supervisord.log
 
-# Test MCP tool directly
-echo '{"tool": "test", "params": {}}' | python3 ./mcp-tools/tool_name.py
+# List all available MCP tools
+./mcp-helper.sh list-tools
+
+# Test all tools automatically
+./mcp-helper.sh test-all
+
+# Test specific MCP tool directly
+echo '{"tool": "create", "params": {"width": 100, "height": 100, "color": "red", "output": "test.png"}}' | python3 ./mcp-tools/imagemagick_mcp.py
 
 # Check Claude Flow configuration
-./node_modules/.bin/claude-flow mcp status
+./node_modules/.bin/claude-flow mcp tools --file ./.mcp.json
+
+# Get Claude usage instructions
+./mcp-helper.sh claude-instructions
 ```
 
 ## Future Enhancements

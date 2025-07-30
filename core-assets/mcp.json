@@ -17,17 +17,17 @@
     },
     "qgis-mcp": {
       "command": "python3",
-      "args": ["./mcp-tools/qgis_mcp.py"],
+      "args": ["-u", "./mcp-tools/qgis_mcp.py"],
       "type": "stdio"
     },
     "kicad-mcp": {
       "command": "python3",
-      "args": ["./mcp-tools/kicad_mcp.py"],
+      "args": ["-u", "./mcp-tools/kicad_mcp.py"],
       "type": "stdio"
     },
     "ngspice-mcp": {
       "command": "python3",
-      "args": ["./mcp-tools/ngspice_mcp.py"],
+      "args": ["-u", "./mcp-tools/ngspice_mcp.py"],
       "type": "stdio"
     },
     "imagemagick-mcp": {
@@ -37,7 +37,7 @@
     },
     "pbr-generator-mcp": {
       "command": "python3",
-      "args": ["./mcp-tools/pbr_generator_mcp.py"],
+      "args": ["-u", "./mcp-tools/pbr_generator_mcp.py"],
       "type": "stdio"
     }
   }

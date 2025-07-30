@@ -60,7 +60,8 @@ RUN apt-get update && \
 # 3. Create a non-root user
 RUN useradd -m -s /bin/bash dev && \
     echo "dev:dev" | chpasswd && \
-    adduser dev sudo
+    adduser dev sudo && \
+    echo "dev ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 # 4. Set up Python environments
 # Create a virtual environment for Python 3.12
@@ -100,7 +101,11 @@ ENV PATH="$DENO_INSTALL/bin:$PATH"
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 COPY setup-workspace.sh /app/setup-workspace.sh
-RUN chmod +x /app/setup-workspace.sh
+COPY mcp-helper.sh /app/mcp-helper.sh
+RUN chmod +x /app/setup-workspace.sh && chmod +x /app/mcp-helper.sh
+
+# Create the log directory for supervisord and other services
+RUN mkdir -p /app/mcp-logs && chown -R dev:dev /app/mcp-logs
 
 # 9. Install Node.js packages
 # Install global Node.js packages
@@ -113,6 +118,15 @@ RUN npm install -g \
     # Install claude-code separately to avoid potential npm conflicts
     npm install -g @anthropic-ai/claude-code@latest && \
     npm install -g sqlite3 --unsafe-perm
+
+# Grant dev user permissions to update global npm packages
+RUN chown -R dev:dev "$(npm config get prefix)/lib/node_modules" && \
+    chown dev:dev "$(npm config get prefix)/bin/gltf-pipeline" \
+                   "$(npm config get prefix)/bin/claude-flow" \
+                   "$(npm config get prefix)/bin/ruv-swarm" \
+                   "$(npm config get prefix)/bin/gemini" \
+                   "$(npm config get prefix)/bin/codex" \
+                   "$(npm config get prefix)/bin/claude"
 
 # ---------- Install Python ML & AI libraries into the 3.12 venv ----------
 # Copy requirements file and install dependencies to leverage Docker layer caching.
