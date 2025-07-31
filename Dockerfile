@@ -53,7 +53,11 @@ RUN apt-get update && \
     chmod +x /usr/local/bin/hadolint
 
 # 3. Create a non-root user
-RUN useradd -m -s /bin/bash dev && \
+# Use build arguments to set the user and group IDs
+ARG HOST_UID=1000
+ARG HOST_GID=1000
+RUN groupadd -g $HOST_GID dev && \
+    useradd -u $HOST_UID -g $HOST_GID -m -s /bin/bash dev && \
     echo "dev:dev" | chpasswd && \
     adduser dev sudo && \
     echo "dev ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers

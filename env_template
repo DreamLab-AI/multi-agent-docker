@@ -3,6 +3,10 @@
 # External directory for mounted files
 EXTERNAL_DIR=./.agent-mount/ext
 
+# Host user and group IDs for file permissions
+HOST_UID=1000
+HOST_GID=1000
+
 # Resource limits (leave empty for auto-detection)
 DOCKER_CPUS=
 DOCKER_MEMORY=

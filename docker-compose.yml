@@ -48,6 +48,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        HOST_UID: ${HOST_UID:-1000}
+        HOST_GID: ${HOST_GID:-1000}
     image: multi-agent-docker:latest
     container_name: multi-agent-container
 

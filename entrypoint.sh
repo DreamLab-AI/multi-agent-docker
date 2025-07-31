@@ -4,8 +4,11 @@ set -e
 echo "=== MCP 3D Environment Starting ==="
 echo "Container IP: $(hostname -I)"
 
-# Ensure the dev user owns the workspace
+# Ensure the dev user owns the workspace and the external mount
 chown -R dev:dev /workspace
+if [ -d "/workspace/ext" ]; then
+  chown -R dev:dev /workspace/ext
+fi
 
 # Ensure the supervisor directory exists
 mkdir -p /workspace/.supervisor
