@@ -7,11 +7,6 @@ FROM nvidia/cuda:12.9.1-devel-ubuntu24.04 AS base
 ARG DEBIAN_FRONTEND=noninteractive
 
 # 1. Set Environment Variables
-# Internal Blender has been removed. This environment now connects to an external Blender instance.
-# ARG BLENDER_DOWNLOAD_URL
-# ENV BLENDER_VERSION="4.5"
-# ENV BLENDER_PATH="/usr/local/blender"
-
 # Set the application workspace directory
 ENV APP_HOME="/app"
 WORKDIR $APP_HOME
@@ -167,8 +162,8 @@ USER dev
 
 # Copy documentation and configuration files
 USER root
-COPY README.md .
-COPY AGENT-BRIEFING.md .
+COPY README.md /app/
+COPY AGENT-BRIEFING.md /app/
 
 # Configure git for the dev user
 RUN git config --global user.email "agent@multi-agent-docker.com" && \
