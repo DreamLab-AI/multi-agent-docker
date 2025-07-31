@@ -56,11 +56,19 @@ RUN apt-get update && \
 # Use build arguments to set the user and group IDs
 ARG HOST_UID=1000
 ARG HOST_GID=1000
-RUN groupadd -g $HOST_GID dev && \
-    useradd -u $HOST_UID -g $HOST_GID -m -s /bin/bash dev && \
-    echo "dev:dev" | chpasswd && \
-    adduser dev sudo && \
-    echo "dev ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+RUN deluser --remove-home dev > /dev/null 2>&1 || true; \
+    if getent group $HOST_GID; then \
+        EXISTING_GROUP_NAME=$(getent group $HOST_GID | cut -d: -f1); \
+        if [ "$EXISTING_GROUP_NAME" != "dev" ]; then \
+            delgroup $EXISTING_GROUP_NAME; \
+        fi; \
+    fi; \
+    delgroup dev > /dev/null 2>&1 || true; \
+    groupadd -g $HOST_GID dev; \
+    useradd -u $HOST_UID -g dev -m -s /bin/bash dev; \
+    echo "dev:dev" | chpasswd; \
+    adduser dev sudo; \
+    echo "dev ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers;
 
 # 4. Set up Python environments
 # Create a virtual environment for Python 3.12
