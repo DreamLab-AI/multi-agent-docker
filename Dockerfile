@@ -56,18 +56,44 @@ RUN apt-get update && \
 # Use build arguments to set the user and group IDs
 ARG HOST_UID=1000
 ARG HOST_GID=1000
-RUN if ! getent group dev > /dev/null; then \
+RUN \
+    # --- Group Setup ---
+    # Check if a group with the target GID already exists.
+    if getent group ${HOST_GID} >/dev/null; then \
+        # GID exists. If its name is not 'dev', rename it.
+        if [ "$(getent group ${HOST_GID} | cut -d: -f1)" != "dev" ]; then \
+            groupmod -n dev "$(getent group ${HOST_GID} | cut -d: -f1)"; \
+        fi; \
+    else \
+        # GID does not exist. Create the 'dev' group with it.
         groupadd -g ${HOST_GID} dev; \
-    else \
-        echo "Group 'dev' already exists."; \
     fi && \
-    if ! id -u dev > /dev/null 2>&1; then \
-        useradd --uid ${HOST_UID} --gid ${HOST_GID} -m -s /bin/bash dev; \
+    \
+    # --- User Setup ---
+    # Check if a user with the target UID already exists.
+    if getent passwd ${HOST_UID} >/dev/null; then \
+        # UID exists. If its name is not 'dev', rename it.
+        if [ "$(getent passwd ${HOST_UID} | cut -d: -f1)" != "dev" ]; then \
+            usermod -l dev "$(getent passwd ${HOST_UID} | cut -d: -f1)"; \
+        fi; \
     else \
-        echo "User 'dev' already exists."; \
+        # UID does not exist. Check if 'dev' user exists with another UID.
+        if id -u dev >/dev/null 2>&1; then \
+            # User 'dev' exists, change its UID.
+            usermod -u ${HOST_UID} dev; \
+        else \
+            # User 'dev' does not exist at all. Create it.
+            useradd --uid ${HOST_UID} --gid ${HOST_GID} -m -s /bin/bash dev; \
+        fi; \
     fi && \
+    \
+    # --- Final Configuration ---
+    # Ensure user 'dev' is in the correct group and has sudo privileges.
+    usermod -g ${HOST_GID} dev && \
     usermod -aG sudo dev && \
     echo "dev ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+    \
+    # Set up permissions for log directory.
     mkdir -p /app/mcp-logs && \
     chown -R dev:dev /app/mcp-logs
 
