@@ -83,7 +83,6 @@ Explore the following documents for a deeper understanding of the project:
 | 🛠️ **[MCP Tool Reference](./TOOLS.md)** | A complete reference for all integrated MCP tools, their capabilities, and usage examples. |
 | 🤖 **[Agent Technical Briefing](./AGENT-BRIEFING.md)** | Documentation specifically for AI agents, detailing their capabilities and interaction patterns. |
 | 🔍 **[Troubleshooting Guide](./TROUBLESHOOTING.md)** | Solutions for common issues related to networking, VNC, and tool connectivity. |
-| 🗑️ **[Waste Code Analysis](./WASTE_CODE.md)** | A review of redundant and unnecessary files in the project. |
 | 📜 **[License](./LICENSE)** | The CC0 1.0 Universal license for this project. |
 
 ## 🖼️ Architecture Diagram
