@@ -11,12 +11,12 @@ This project provides a sophisticated, multi-container Docker environment design
 ## ✨ Key Features
 
 - **Dual-Container Architecture**: Separates core AI logic and CLI tools from resource-intensive GUI applications.
-- **Comprehensive Toolset**: Integrates a wide range of tools including 3D modeling (Blender), Electronic Design Automation (KiCad, NGSpice), Geospatial Information Systems (QGIS), image processing (ImageMagick), and Physically Based Rendering (PBR) texture generation.
-- **MCP-based Communication**: Utilizes the Model Context Protocol for seamless interaction between AI agents and diverse tools.
-- **External Application Bridges**: Employs TCP-based bridges for robust communication with external GUI applications running in a dedicated container.
-- **Modern Development Stack**: Built on Python 3.12, Node.js 22+, Rust, and Deno runtimes.
-- **Automated Setup**: Streamlined workspace initialization with helper scripts.
-- **AI-Ready**: Designed for automatic knowledge integration and orchestration by AI agents.
+- **Rich Development Environment**: A polyglot environment with runtimes for Python, Node.js, Rust, and Deno, equipped with extensive tooling for AI/ML, 3D graphics, EDA, document processing, and network analysis.
+- **Comprehensive AI Tooling**: Includes a full suite of AI/ML libraries (PyTorch, TensorFlow), GPU acceleration with the CUDA Toolkit, and CLIs for major AI models (Gemini, OpenAI Codex, Anthropic Claude).
+- **Advanced Hardware Acceleration**: Supports GPU-accelerated computing with CUDA and AI inference with the WasmEdge runtime and its OpenVINO backend.
+- **MCP-based Orchestration**: Utilises the Model Context Protocol for seamless interaction between AI agents and a wide array of specialised tools.
+- **External Application Bridges**: Employs TCP-based bridges for robust communication with external GUI applications (Blender, QGIS) running in a dedicated container.
+- **Automated & Customisable Setup**: Features helper scripts for easy workspace initialisation and a user-centric configuration that aligns container permissions with the host system.
 
 ## 🎬 Demonstration
 
@@ -71,6 +71,19 @@ To get the environment up and running, follow these steps:
 | `multi-agent` | `multi-agent-container` | Orchestration, AI logic, CLI tools | `docker exec` |
 | `gui-tools-service` | `gui-tools-container` | Runs heavy GUI apps (Blender, QGIS, PBR Generator) | VNC on `localhost:5901` |
 
+## 🔧 Core Development Environment
+
+Beyond the specialised MCP tools, this environment provides a rich, general-purpose development ecosystem. For a complete list of all available command-line tools, libraries, and runtimes, please see the **[Available Tooling Reference](./TOOLS.md)**.
+
+Key components of the core environment include:
+
+- **AI & Machine Learning**: PyTorch, TensorFlow, CUDA Toolkit, WasmEdge with OpenVINO.
+- **3D, Graphics & Media**: FFmpeg, ImageMagick, Inkscape, Colmap.
+- **Document Processing**: A full TeX Live installation with `latexmk`.
+- **Runtimes**: Python 3.12, Node.js 22+, Rust, and Deno.
+- **Build & Dev Tools**: Git, Docker, ShellCheck, Hadolint, Tmux.
+- **Networking**: `nmap`, `tcpdump`, `traceroute`, and other essential utilities.
+
 ## 📚 Detailed Documentation
 
 Explore the following documents for a deeper understanding of the project:
@@ -78,9 +91,9 @@ Explore the following documents for a deeper understanding of the project:
 | Document | Description |
 |---|---|
 | 🚀 **[Quick Start Guide](./QUICKSTART.md)** | Step-by-step instructions to get the environment running. |
-| 🏗️ **[Architecture Overview](./ARCHITECTURE.md)** | Detailed explanation of the system's dual-container architecture, process management, and MCP tool layers. |
-| 🌐 **[Networking Deep Dive](./NETWORKING.md)** | Comprehensive guide to the Docker networking model, service communication, and port mappings. |
-| 🛠️ **[MCP Tool Reference](./TOOLS.md)** | A complete reference for all integrated MCP tools, their capabilities, and usage examples. |
+| 🛠️ **[Available Tooling Reference](./TOOLS.md)** | A complete reference for all integrated tools, libraries, and runtimes. |
+| 🏗️ **[Architecture Overview](./ARCHITECTURE.md)** | Detailed explanation of the system's dual-container architecture and MCP tool layers. |
+| 🌐 **[Networking Deep Dive](./NETWORKING.md)** | Comprehensive guide to the Docker networking model and service communication. |
 | 🤖 **[Agent Technical Briefing](./AGENT-BRIEFING.md)** | Documentation specifically for AI agents, detailing their capabilities and interaction patterns. |
 | 🔍 **[Troubleshooting Guide](./TROUBLESHOOTING.md)** | Solutions for common issues related to networking, VNC, and tool connectivity. |
 | 📜 **[License](./LICENSE)** | The CC0 1.0 Universal license for this project. |
