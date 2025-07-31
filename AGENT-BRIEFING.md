@@ -3,11 +3,15 @@
 ## 1. Mission Objective
 Your primary objective is to function as a highly autonomous, collaborative group of AI agents within this unified Docker environment. Your goal is to assist the user with complex software development, data analysis, and systems architecture tasks by leveraging the full suite of tools and MCP services available.
 
-## 2. Core Architecture: Decoupled & Centralized
-This environment has been refactored to a clean, modular architecture. Key principles are:
-- **`core-assets` is the Source of Truth:** All core configurations, agent definitions, and essential scripts are located in `/app/core-assets`. This is the immutable foundation of the environment.
-- **Dynamic Workspace:** The `/workspace` directory is ephemeral and user-managed. It is initialized by running `/app/setup-workspace.sh`, which provisions it with the necessary files from `core-assets`. You should always operate within the `/workspace` directory.
-- **Externalized Services:** Heavy applications like Blender and QGIS are no longer installed inside this container. Instead, we connect to them as external services via MCP bridges.
+## 2. Core Architecture: Dual-Container and Bridge-Based
+
+This environment utilizes a sophisticated dual-container architecture to separate concerns and optimize resource usage.
+
+-   **`multi-agent-container` (Your Home):** This is the primary container where you, the AI agents, and all the core logic reside. It contains the `claude-flow` orchestrator, all MCP tool clients, and the development runtimes (Python, Node.js, etc.). Your operations are confined to this container.
+
+-   **`gui-tools-container` (The Workshop):** This second container is dedicated to running resource-intensive GUI applications like Blender, QGIS, and the PBR Generator. It is managed separately and you do not have direct access to it.
+
+-   **The Bridge Pattern:** You interact with the applications in the `gui-tools-container` through a **bridge pattern**. The MCP tools like `blender-mcp`, `qgis-mcp`, and `pbr-generator-mcp` are not the tools themselves, but lightweight clients that forward your requests over the network (via TCP) to the actual applications.
 
 ## 3. Key Components & Workflow
 
@@ -20,20 +24,25 @@ This environment has been refactored to a clean, modular architecture. Key princ
 - **`/app/core-assets/roo-config/`:** Contains modes and rules for the Roo agent.
 
 ### 3.3. MCP Services Ecosystem
-The environment is built around a rich ecosystem of MCP servers, managed by `supervisord`. You can interact with:
-- **`claude-flow` & `ruv-swarm`:** Core agent coordination and intelligence.
-- **`mcp-ws-bridge`:** A critical WebSocket-to-Stdio bridge on port `3002`. This allows external systems (e.g., a Rust client in another container) to connect and control the `claude-flow` MCP process.
-- **Specialized Tool Servers:**
-    - `blender-tcp`: Connects to an external Blender instance.
-    - `kicad-mcp`: For electronic design automation.
-    - `ngspice-mcp`: For circuit simulation.
-    - `imagemagick-mcp`: For advanced image manipulation.
-    - `pbr-generator-mcp`: For creating physically-based rendering materials.
-    - `qgis-mcp`: Connects to an external QGIS instance for geospatial analysis.
+
+Your capabilities are defined by the MCP tools available in your container. These tools fall into two categories:
+
+-   **Direct Tools:** These are self-contained command-line tools that run directly within your container.
+    -   `imagemagick-mcp`: For all image manipulation tasks.
+    -   `kicad-mcp`: For electronic design automation (EDA).
+    -   `ngspice-mcp`: For circuit simulation.
+
+-   **Bridge Tools:** These tools connect to services running in the `gui-tools-container`.
+    -   `blender-mcp`: Your interface to the Blender 3D application.
+    -   `qgis-mcp`: Your interface to the QGIS geospatial application.
+    -   `pbr-generator-mcp`: Your interface to the PBR texture generation service.
 
 ## 4. Your Operational Directives
-1.  **Assume a Clean Slate:** Always consider the `/workspace` as potentially empty. Your first step in a new session might be to ensure the workspace is initialized.
-2.  **Consult `mcp.json`:** Before attempting to use a tool, understand how it's configured in `.mcp.json` (once copied to the workspace). This tells you the command, arguments, and environment variables.
-3.  **Use the Bridge for External Control:** The `mcp-ws-bridge` is the designated entry point for external systems to interact with the agent system.
-4.  **Leverage the Full Toolchain:** You have a powerful suite of EDA, 2D/3D, and geospatial tools at your disposal. Analyze the user's request to determine the optimal combination of MCP services to achieve the goal.
-5.  **Self-Correction and Adaptation:** If a tool is not available or a connection fails, consult the configuration files and the environment setup to diagnose the issue. The architecture is designed to be transparent and debuggable.
+
+1.  **Workspace is Key:** Always operate within the `/workspace` directory. Ensure it has been initialized with `/app/setup-workspace.sh` at the start of a session.
+2.  **Consult the Tool Reference:** The `TOOLS.md` document is your primary reference for understanding the capabilities and parameters of each MCP tool.
+3.  **Respect the Bridge:** When using bridge tools (`blender-mcp`, `qgis-mcp`, `pbr-generator-mcp`), remember you are communicating with a remote application. Commands may take longer to execute.
+4.  **Diagnose Failures:**
+    *   If a **direct tool** fails, check your command's syntax and parameters.
+    *   If a **bridge tool** fails, the issue is likely in the `gui-tools-container`. The service might be down or there could be a network issue. You cannot fix this directly, but you can report the failure to the user, mentioning the bridge pattern.
+5.  **Leverage the Full Toolchain:** You have a powerful suite of EDA, 2D/3D, and geospatial tools. Analyze the user's request to determine the optimal combination of MCP services to achieve the goal.

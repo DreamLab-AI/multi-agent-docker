@@ -354,7 +354,36 @@ echo '{"tool": "create", "params": {"width": 100, "height": 100, "color": "red",
 
 ## Future Enhancements
 
-1. **Service Discovery**: Automatic detection of external applications
-2. **Load Balancing**: Multiple instances of tools for parallel processing
-3. **Monitoring**: Prometheus metrics for tool usage and performance
-4. **Hot Reload**: Dynamic tool updates without container restart
+1.  **Service Discovery**: Implement automatic detection and registration of external applications.
+2.  **Load Balancing**: Support multiple instances of tools for parallel processing and improved performance.
+3.  **Monitoring**: Integrate Prometheus metrics for detailed insights into tool usage and performance.
+4.  **Hot Reload**: Enable dynamic updates to tools and configurations without requiring container restarts.
+5.  **Vision Model Integration**: Deploy a local vision model in the `gui-tools-container` to provide real-time visual descriptions of GUI application states to the AI agents. This involves selecting, optimizing, and deploying a suitable model and designing an efficient data streaming mechanism.
+6.  **Revit Model Parsing and Conversion**: Implement a tool to parse Revit models (`.rvt` files) and convert their data into a Blender-compatible format, preserving semantic information. This requires a deep understanding of both Revit's data model and Blender's API, likely involving external libraries and custom parsers.
+
+## Testing and Validation
+
+To ensure the robustness and functionality of the integrated tools, especially those interacting with external GUI applications, the following testing scenarios are recommended:
+
+1.  **Gemini CLI Integration Test**:
+    -   **Objective**: Verify that the Gemini CLI tool can be successfully invoked and performs its intended function within the `multi-agent-container`.
+    -   **Scenario**: Execute a simple Gemini CLI command (e.g., `gemini --version` or a basic text generation request if configured) and confirm successful output.
+    -   **Command Example**: `docker exec -it multi-agent-container gemini --version`
+2.  **Codex Integration Test**:
+    -   **Objective**: Confirm that the OpenAI Codex tool is correctly set up and can process code-related requests.
+    -   **Scenario**: Use a simple Codex command (e.g., a code completion or explanation request) and validate the response.
+    -   **Command Example**: `docker exec -it multi-agent-container codex --help` (or a more specific command if an API key is configured)
+3.  **PBR Texture Creation and Live Model Integration in Blender**:
+    -   **Objective**: Validate the end-to-end workflow of generating PBR textures and applying them to a live 3D model within Blender via the MCP bridge.
+    -   **Scenario**:
+        1.  From the `multi-agent-container`, use `pbr-generator-mcp` to generate a set of PBR textures (e.g., diffuse, normal, roughness) for a specified material.
+        2.  Within the same `multi-agent-container`, use `blender-mcp` to:
+            -   Create a simple 3D object (e.g., a cube or sphere) in Blender.
+            -   Import the newly generated PBR textures into Blender.
+            -   Apply these textures to the created 3D object, ensuring the material nodes are correctly set up.
+            -   Capture a viewport screenshot of the textured object to visually confirm the application.
+    -   **Command Examples**:
+        -   Generate PBR textures: `./mcp-helper.sh run-tool pbr-generator-mcp '{"tool": "generate_material", "params": {"material": "wood", "resolution": "512x512", "types": ["diffuse", "normal", "roughness"], "output": "/workspace/pbr_outputs"}}'`
+        -   Create object in Blender: `./mcp-helper.sh run-tool blender-mcp '{"type": "execute_code", "params": {"code": "bpy.ops.mesh.primitive_cube_add(size=2)"}}'`
+        -   Import and apply textures (requires more complex `execute_code` or a dedicated `set_pbr_material` method in `addon.py`): This would involve a sequence of `blender-mcp` calls to load images, create a material, and link nodes.
+        -   Get screenshot: `./mcp-helper.sh run-tool blender-mcp '{"type": "get_viewport_screenshot", "params": {"filepath": "/workspace/textured_cube.png"}}'`

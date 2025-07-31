@@ -8,15 +8,14 @@ Get up and running with the Multi-Agent Docker Environment in under 5 minutes!
 # 1. Clone & enter directory
 git clone <repository-url> && cd multi-agent-docker
 
-# 2. Build & start using the helper script
+# 2. Build and start the environment
 ./multi-agent.sh build
 ./multi-agent.sh start
 
-# 3. Initialize workspace (automatic shell entry)
+# 3. Inside the container shell, initialize the workspace
 /app/setup-workspace.sh
 
-# 4. Verify everything works
-./mcp-helper.sh list-tools
+# 4. Verify the setup
 ./mcp-helper.sh test-all
 ```
 
@@ -39,38 +38,45 @@ cd multi-agent-docker
 
 ### Step 2: Build and Start
 
-```bash
-# Build the image
-./multi-agent.sh build
+The `multi-agent.sh` script simplifies the setup process.
 
-# Start the container (automatically enters shell)
+First, build the Docker images:
+```bash
+./multi-agent.sh build
+```
+
+Then, start the services. This command will start the containers in the background and automatically open a shell into the `multi-agent-container`:
+```bash
 ./multi-agent.sh start
 ```
 
-Expected output:
+You will see output indicating the containers are starting, followed by the container's command prompt:
 ```
+Starting multi-agent container...
+...
 Container started! Waiting for health checks...
+...
 Multi-Agent Container Status:
 =============================
-NAME                    IMAGE                       STATUS                   PORTS
-multi-agent-container   multi-agent-docker:latest   Up X seconds (healthy)   3000->3000/tcp, 3002->3002/tcp...
+NAME                      IMAGE                             STATUS              PORTS
+gui-tools-container       multi-agent-docker_gui-tools      Up About a minute   0.0.0.0:5901->5901/tcp, 0.0.0.0:9876-9878->9876-9878/tcp
+multi-agent-container     multi-agent-docker_multi-agent    Up About a minute   0.0.0.0:3000->3000/tcp, 0.0.0.0:3002->3002/tcp
 
 Entering multi-agent container as 'dev' user...
-dev@xxxxxxxxxxxx:/workspace$
+dev@multi-agent-container:/workspace$
 ```
 
 ### Step 3: Initialize Your Workspace
 
+Once inside the container, run the setup script. This only needs to be done the first time you start the environment.
 ```bash
 /app/setup-workspace.sh
 ```
-
-This will:
-- ✅ Copy MCP tools and helper scripts to workspace
-- ✅ Set proper executable permissions
-- ✅ Install Claude Flow locally
-- ✅ Update CLAUDE.md with tool knowledge
-- ✅ Verify all tools are working
+This script prepares your environment by:
+- ✅ Copying the latest MCP tools and helper scripts into your workspace.
+- ✅ Setting the correct executable permissions.
+- ✅ Installing the `claude-flow` orchestrator via `npm`.
+- ✅ Verifying that all configured MCP tools are responsive.
 
 ### Step 4: Test MCP Tools
 
@@ -87,19 +93,21 @@ This will:
 
 ## 🎉 Success Indicators
 
-You know everything is working when:
+You'll know the environment is fully operational when you can confirm the following:
 
-1. `./mcp-helper.sh list-tools` shows all 6 tools:
-   ```
-   ✅ imagemagick-mcp - Image manipulation and creation
-   ✅ blender-mcp - 3D modeling and rendering
-   ✅ qgis-mcp - Geospatial analysis
-   ✅ kicad-mcp - Electronic design automation
-   ✅ ngspice-mcp - Circuit simulation
-   ✅ pbr-generator-mcp - PBR texture generation
-   ```
+1.  **Both Containers are Running**: Open a new terminal on your host machine and run `./multi-agent.sh status`. You should see both `multi-agent-container` and `gui-tools-container` with a `Up` status.
 
-2. `./mcp-helper.sh test-all` passes all tests
+2.  **VNC Access to GUI Tools**:
+    *   Open your favorite VNC client (e.g., RealVNC, TigerVNC).
+    *   Connect to `localhost:5901`.
+    *   You should see the XFCE desktop environment of the `gui-tools-container`, with applications like Blender and QGIS running.
+
+3.  **All MCP Tools Pass Tests**:
+    *   Inside the `multi-agent-container` shell, run the test script:
+        ```bash
+        ./mcp-helper.sh test-all
+        ```
+    *   All tests should pass, indicating that the bridges to the external GUI applications are working correctly.
 
 ## 🔥 Common First Tasks
 
@@ -117,31 +125,36 @@ You know everything is working when:
 
 ```bash
 # Generate a metal PBR texture set
-./mcp-helper.sh run-tool pbr-generator-mcp '{"material": "brushed_metal", "resolution": "1024x1024", "output_dir": "./pbr_textures"}'
+./mcp-helper.sh run-tool pbr-generator-mcp '{"tool": "generate_material", "params": {"material": "brushed_metal", "resolution": "1024x1024", "output": "./pbr_textures"}}'
 ```
 
 ### Test 3D Tools
 
-```bash
-# Connect to external Blender (if running on port 9876)
-./mcp-helper.sh run-tool blender-mcp '{"action": "status"}'
+The 3D tools run in the `gui-tools-container` and are accessed via a bridge.
 
-# Test QGIS capabilities
-./mcp-helper.sh run-tool qgis-mcp '{"action": "info"}'
+```bash
+# Create a simple cube in Blender
+./mcp-helper.sh run-tool blender-mcp '{"tool": "execute_code", "params": {"code": "import bpy; bpy.ops.mesh.primitive_cube_add()"}}'
+
+# Check the QGIS version
+./mcp-helper.sh run-tool qgis-mcp '{"tool": "get_qgis_version"}'
 ```
+You can verify the cube was created by checking the VNC session at `localhost:5901`.
 
 ## ⚡ Quick Commands Reference
 
+These commands are run from your **host machine's terminal**.
+
 | Command | Description |
-|---------|-------------|
-| `./multi-agent.sh start` | Start container (auto-enters shell) |
-| `./multi-agent.sh shell` | Enter running container |
-| `./multi-agent.sh logs` | View container logs |
-| `./multi-agent.sh stop` | Stop container |
-| `./mcp-helper.sh list-tools` | List all MCP tools |
-| `./mcp-helper.sh test-all` | Test all tools |
-| `./mcp-helper.sh claude-instructions` | Get Claude usage guide |
-| `exit` | Leave container |
+|---|---|
+| `./multi-agent.sh build` | Builds or rebuilds the Docker images. |
+| `./multi-agent.sh start` | Starts both containers and enters the `multi-agent-container` shell. |
+| `./multi-agent.sh stop` | Stops and removes the containers. |
+| `./multi-agent.sh restart` | Restarts the containers. |
+| `./multi-agent.sh status` | Shows the status of the running containers. |
+| `./multi-agent.sh logs` | Tails the logs from both containers. Use `logs -f` to follow. |
+| `./multi-agent.sh shell` | Enters the shell of an already running `multi-agent-container`. |
+| `./multi-agent.sh cleanup` | Stops containers and removes all associated volumes (deletes all data). |
 
 ## 🆘 Quick Fixes
 
