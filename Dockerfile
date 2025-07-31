@@ -56,19 +56,20 @@ RUN apt-get update && \
 # Use build arguments to set the user and group IDs
 ARG HOST_UID=1000
 ARG HOST_GID=1000
-RUN deluser --remove-home dev > /dev/null 2>&1 || true; \
-    if getent group $HOST_GID; then \
-        EXISTING_GROUP_NAME=$(getent group $HOST_GID | cut -d: -f1); \
-        if [ "$EXISTING_GROUP_NAME" != "dev" ]; then \
-            delgroup $EXISTING_GROUP_NAME; \
-        fi; \
-    fi; \
-    delgroup dev > /dev/null 2>&1 || true; \
-    groupadd -g $HOST_GID dev; \
-    useradd -u $HOST_UID -g dev -m -s /bin/bash dev; \
-    echo "dev:dev" | chpasswd; \
-    adduser dev sudo; \
-    echo "dev ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers;
+RUN if ! getent group dev > /dev/null; then \
+        groupadd -g ${HOST_GID} dev; \
+    else \
+        echo "Group 'dev' already exists."; \
+    fi && \
+    if ! id -u dev > /dev/null 2>&1; then \
+        useradd --uid ${HOST_UID} --gid ${HOST_GID} -m -s /bin/bash dev; \
+    else \
+        echo "User 'dev' already exists."; \
+    fi && \
+    usermod -aG sudo dev && \
+    echo "dev ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+    mkdir -p /app/mcp-logs && \
+    chown -R dev:dev /app/mcp-logs
 
 # 4. Set up Python environments
 # Create a virtual environment for Python 3.12
@@ -111,8 +112,7 @@ COPY setup-workspace.sh /app/setup-workspace.sh
 COPY mcp-helper.sh /app/mcp-helper.sh
 RUN chmod +x /app/setup-workspace.sh && chmod +x /app/mcp-helper.sh
 
-# Create the log directory for supervisord and other services
-RUN mkdir -p /app/mcp-logs && chown -R dev:dev /app/mcp-logs
+# Log directory is now created during user setup
 
 # 9. Install Node.js packages
 # Install global Node.js packages
