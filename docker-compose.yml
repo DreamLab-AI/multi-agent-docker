@@ -74,10 +74,19 @@ services:
       - QGIS_PORT=9877
       - PBR_HOST=gui-tools-service
       - PBR_PORT=9878
+      # MCP TCP Server Configuration (NEW)
+      - MCP_TCP_AUTOSTART=true
+      - MCP_TCP_PORT=9500
+      - MCP_ENABLE_TCP=true
+      - MCP_ENABLE_UNIX=false
+      - MCP_LOG_LEVEL=info
+      - MCP_HEALTH_PORT=9501
 
     ports:
       - "3000:3000"    # Claude Flow UI
-      - "3002:3002"    # Claude Flow MCP WebSocket Bridge
+      - "3002:3002"    # WebSocket Bridge (existing)
+      - "9500:9500"    # MCP TCP Server (NEW)
+      - "9501:9501"    # MCP Health Check (NEW)
 
     volumes:
       - ./workspace:/workspace
@@ -85,6 +94,8 @@ services:
       - ./pbr_outputs:/workspace/pbr_outputs
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - ${EXTERNAL_DIR:-./.agent-mount/ext}:/workspace/ext
+      # For Unix socket support (optional)
+      - mcp-sockets:/var/run/mcp
 
     # Run in interactive mode by default
     command: ["--interactive"]
@@ -104,13 +115,13 @@ services:
     mem_limit: ${DOCKER_MEMORY:-16g}
     cpus: "${DOCKER_CPUS:-4}"
 
-    # Healthcheck
+    # Health check for both WebSocket and TCP
     healthcheck:
-      test: ["CMD", "sh", "-c", "command -v claude-flow >/dev/null"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      test: ["CMD-SHELL", "curl -f http://localhost:9501/health || curl -f http://localhost:3002/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
 
     # Restart policy
@@ -127,3 +138,5 @@ networks:
 volumes:
   workspace:
   blender-files:
+  mcp-sockets:
+    driver: local

@@ -12,6 +12,7 @@ This project provides a sophisticated, multi-container Docker environment design
 
 - **Dual-Container Architecture**: Separates core AI logic and CLI tools from resource-intensive GUI applications.
 - **Rich Development Environment**: A polyglot environment with runtimes for Python, Node.js, Rust, and Deno, equipped with extensive tooling for AI/ML, 3D graphics, EDA, document processing, and network analysis.
+- **Flexible MCP Connectivity**: Supports both WebSocket (port 3002) and high-performance TCP (port 9500) for MCP communication.
 - **Comprehensive AI Tooling**: Includes a full suite of AI/ML libraries (PyTorch, TensorFlow), GPU acceleration with the CUDA Toolkit, and CLIs for major AI models (Gemini, OpenAI Codex, Anthropic Claude).
 - **Advanced Hardware Acceleration**: Supports GPU-accelerated computing with CUDA and AI inference with the WasmEdge runtime and its OpenVINO backend.
 - **MCP-based Orchestration**: Utilises the Model Context Protocol for seamless interaction between AI agents and a wide array of specialised tools.
@@ -64,6 +65,55 @@ To get the environment up and running, follow these steps:
     ./mcp-helper.sh test-all
     ```
 
+## 🔌 MCP Connectivity
+
+This environment offers two primary ways to connect to the Model Context Protocol (MCP) server, catering to different needs for performance and accessibility.
+
+### MCP TCP Server (Port 9500)
+
+For high-performance, low-latency connections, a direct TCP server is available. This is the recommended method for inter-container communication or performance-critical applications.
+
+-   **Port**: `9500` (configurable via `MCP_TCP_PORT`)
+-   **Benefits**:
+    -   **Performance**: Direct TCP is significantly faster than WebSocket, with lower overhead.
+    -   **Simplicity**: No WebSocket protocol layer, making it easier to use with standard TCP clients.
+    -   **Compatibility**: Works with any standard TCP client library in any language.
+
+#### Usage (from another container)
+
+```rust
+use tokio::net::TcpStream;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+let mut stream = TcpStream::connect("multi-agent-container:9500").await?;
+let mut reader = BufReader::new(stream.try_clone().await?);
+
+// Send request
+let request = r#"{"jsonrpc":"2.0","id":"1","method":"initialize","params":{}}"#;
+stream.write_all(request.as_bytes()).await?;
+stream.write_all(b"\n").await?;
+
+// Read response
+let mut response = String::new();
+reader.read_line(&mut response).await?;
+```
+
+#### Management Commands (inside `multi-agent-container`)
+
+-   `mcp-tcp-start`: Start the TCP server.
+-   `mcp-tcp-stop`: Stop the TCP server.
+-   `mcp-tcp-status`: Check the server status.
+-   `mcp-tcp-restart`: Restart the server.
+-   `mcp-tcp-logs`: View server logs.
+-   `mcp-tcp-test`: Run a simple connection test.
+
+### MCP WebSocket Bridge (Port 3002)
+
+The existing WebSocket bridge remains available for clients that require or prefer a WebSocket connection.
+
+-   **Port**: `3002`
+-   **Use Cases**: Ideal for web-based clients or systems where TCP connections are restricted.
+
 ## 📊 Services Overview
 
 | Service Name | Container Name | Purpose | Access |
@@ -103,25 +153,27 @@ Explore the following documents for a deeper understanding of the project:
 ```mermaid
 graph TD
     subgraph "Host Machine"
-        User[User/External System] -- WebSocket --> WS_Bridge(mcp-ws-relay.js:3002)
-        User -- VNC --> VNC_Access(localhost:5901)
+        User_WS[User/External System] -- WebSocket --> WS_Bridge(mcp-ws-relay.js:3002)
+        User_TCP[User/External System] -- TCP --> TCP_Server(mcp-tcp-server.js:9500)
+        User_VNC[User/External System] -- VNC --> VNC_Access(localhost:5901)
     end
 
     subgraph "Docker Network: docker_ragflow"
         subgraph "multi-agent-container"
             MA_Container(Multi-Agent Container)
+            TCP_Server -- Stdio --> ClaudeFlow_TCP(claude-flow)
+            WS_Bridge -- Stdio --> ClaudeFlow_WS(claude-flow)
+            
             MA_Container -- TCP --> Blender_Client(mcp-blender-client.js)
             MA_Container -- TCP --> QGIS_Client(qgis_mcp.py)
             MA_Container -- TCP --> PBR_Client(pbr_mcp_client.py)
             MA_Container -- Stdio --> ImageMagick(imagemagick_mcp.py)
             MA_Container -- Stdio --> KiCad(kicad_mcp.py)
             MA_Container -- Stdio --> NGSpice(ngspice_mcp.py)
-            MA_Container -- Stdio --> ClaudeFlow(claude-flow)
             MA_Container -- Stdio --> RuvSwarm(ruv-swarm)
             MA_Container -- Stdio --> GeminiCLI(gemini-cli)
             MA_Container -- Stdio --> OpenAI_Codex(openai-codex)
             MA_Container -- Stdio --> Anthropic_Claude(anthropic-claude)
-            WS_Bridge -- Stdio --> ClaudeFlow
         end
 
         subgraph "gui-tools-container"
@@ -142,25 +194,8 @@ graph TD
     style MA_Container fill:#f9f,stroke:#333,stroke-width:2px
     style GUI_Container fill:#ccf,stroke:#333,stroke-width:2px
     style WS_Bridge fill:#afa,stroke:#333,stroke-width:2px
+    style TCP_Server fill:#afa,stroke:#333,stroke-width:2px
     style VNC_Access fill:#afa,stroke:#333,stroke-width:2px
-    style Blender_Client fill:#ffc,stroke:#333,stroke-width:1px
-    style QGIS_Client fill:#ffc,stroke:#333,stroke-width:1px
-    style PBR_Client fill:#ffc,stroke:#333,stroke-width:1px
-    style ImageMagick fill:#ffc,stroke:#333,stroke-width:1px
-    style KiCad fill:#ffc,stroke:#333,stroke-width:1px
-    style NGSpice fill:#ffc,stroke:#333,stroke-width:1px
-    style ClaudeFlow fill:#ffc,stroke:#333,stroke-width:1px
-    style RuvSwarm fill:#ffc,stroke:#333,stroke-width:1px
-    style GeminiCLI fill:#ffc,stroke:#333,stroke-width:1px
-    style OpenAI_Codex fill:#ffc,stroke:#333,stroke-width:1px
-    style Anthropic_Claude fill:#ffc,stroke:#333,stroke-width:1px
-    style Blender_Server fill:#ffc,stroke:#333,stroke-width:1px
-    style QGIS_Server fill:#ffc,stroke:#333,stroke-width:1px
-    style PBR_Server fill:#ffc,stroke:#333,stroke-width:1px
-    style XFCE_Desktop fill:#ffc,stroke:#333,stroke:#333,stroke-width:1px
-    style Blender_App fill:#ffc,stroke:#333,stroke-width:1px
-    style QGIS_App fill:#ffc,stroke:#333,stroke-width:1px
-    style PBR_Generator fill:#ffc,stroke:#333,stroke-width:1px
 ```
 
 ## 📜 License

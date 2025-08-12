@@ -196,6 +196,24 @@ COPY --chown=dev:dev core-assets/ /app/core-assets/
 # Install Node.js dependencies for all scripts
 USER root
 RUN cd /app/core-assets/scripts && npm install && chown -R dev:dev /app/core-assets/scripts/node_modules
+
+# Copy MCP patches and enhanced setup
+COPY core-assets/patches /app/patches
+COPY setup-workspace-enhanced.sh /app/setup-workspace-enhanced.sh
+RUN chmod +x /app/setup-workspace-enhanced.sh
+
+# Backup original setup-workspace.sh if it exists
+RUN if [ -f /app/setup-workspace.sh ]; then \
+        mv /app/setup-workspace.sh /app/setup-workspace-original.sh; \
+    fi && \
+    ln -s /app/setup-workspace-enhanced.sh /app/setup-workspace.sh
+
+# Create necessary directories
+RUN mkdir -p /var/run/mcp /app/mcp-logs && \
+    chown -R dev:dev /var/run/mcp /app/mcp-logs
+
+# Install Node.js dependencies for TCP server
+RUN cd /app && npm init -y && npm install ws
 USER dev
 
 # Copy documentation and configuration files
@@ -216,7 +234,3 @@ ENTRYPOINT ["/entrypoint.sh"]
 
 # Default command to start supervisord
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
-
-# Healthcheck to verify claude-flow is installed
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-  CMD ["sh", "-c", "command -v claude-flow >/dev/null"] || exit 1
