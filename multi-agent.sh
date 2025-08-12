@@ -147,6 +147,7 @@ Multi-Agent Docker Commands:
 Service URLs:
   - Claude Flow UI: http://localhost:3000
   - MCP WebSocket: ws://localhost:3002
+  - MCP TCP Server: tcp://localhost:9500
 EOF
 }
 
@@ -173,6 +174,7 @@ start() {
   echo "Access points:"
   echo "  - Claude Flow UI: http://localhost:3000"
   echo "  - MCP WebSocket: ws://localhost:3002"
+  echo "  - MCP TCP Server: tcp://localhost:9500"
 
   # Automatically enter the shell
   shell

@@ -197,18 +197,10 @@ COPY --chown=dev:dev core-assets/ /app/core-assets/
 USER root
 RUN cd /app/core-assets/scripts && npm install && chown -R dev:dev /app/core-assets/scripts/node_modules
 
-# Copy MCP patches and enhanced setup
+# Copy MCP patches
 COPY core-assets/patches /app/patches
-COPY setup-workspace-enhanced.sh /app/setup-workspace-enhanced.sh
-RUN chmod +x /app/setup-workspace-enhanced.sh
 
-# Backup original setup-workspace.sh if it exists
-RUN if [ -f /app/setup-workspace.sh ]; then \
-        mv /app/setup-workspace.sh /app/setup-workspace-original.sh; \
-    fi && \
-    ln -s /app/setup-workspace-enhanced.sh /app/setup-workspace.sh
-
-# Create necessary directories
+# Create necessary directories for MCP
 RUN mkdir -p /var/run/mcp /app/mcp-logs && \
     chown -R dev:dev /var/run/mcp /app/mcp-logs
 
