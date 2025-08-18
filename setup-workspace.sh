@@ -1,8 +1,13 @@
 #!/bin/bash
+# Re-launch with sudo if not running as root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Requesting root privileges for setup..."
+    exec sudo /bin/bash "$0" "$@"
+fi
 # Enhanced setup script that includes MCP TCP server installation
 # This replaces or augments the existing setup-workspace.sh
 
-set -e
+# set -e
 
 echo "🚀 Initializing enhanced PowerDev workspace with TCP/Unix MCP support..."
 
@@ -32,10 +37,17 @@ mkdir -p /var/run/mcp
 mkdir -p /app/mcp-logs
 
 # Copy the TCP server wrapper
-if [ -f "/app/patches/mcp-tcp-server.js" ]; then
-    cp /app/patches/mcp-tcp-server.js /app/mcp-tcp-server.js
+if [ -f "/app/core-assets/scripts/mcp-tcp-server.js" ]; then
+    cp /app/core-assets/scripts/mcp-tcp-server.js /app/mcp-tcp-server.js
     chmod +x /app/mcp-tcp-server.js
     echo "✅ MCP TCP server wrapper installed"
+elif [ -f "/app/scripts/mcp-tcp-server.js" ]; then
+    cp /app/scripts/mcp-tcp-server.js /app/mcp-tcp-server.js
+    chmod +x /app/mcp-tcp-server.js
+    echo "✅ MCP TCP server wrapper installed"
+else
+    echo "❌ MCP TCP server wrapper not found in /app/core-assets/patches/ or /app/patches/"
+    echo "   Please ensure mcp-tcp-server.js exists in one of these locations"
 fi
 
 # 4. Create systemd-style service script (if systemd not available)
@@ -51,8 +63,8 @@ export MCP_ENABLE_UNIX="${MCP_ENABLE_UNIX:-false}"
 export MCP_LOG_LEVEL="${MCP_LOG_LEVEL:-info}"
 
 # Check if already running
-if [ -f "/var/run/mcp-tcp.pid" ]; then
-    PID=$(cat /var/run/mcp-tcp.pid)
+if [ -f "/var/run/mcp/tcp.pid" ]; then
+    PID=$(cat /var/run/mcp/tcp.pid)
     if ps -p $PID > /dev/null 2>&1; then
         echo "MCP TCP server already running (PID: $PID)"
         exit 0
@@ -62,8 +74,9 @@ fi
 # Start the server
 echo "Starting MCP TCP server on port $MCP_TCP_PORT..."
 nohup node /app/mcp-tcp-server.js > /app/mcp-logs/tcp-server.log 2>&1 &
-echo $! > /var/run/mcp-tcp.pid
-echo "MCP TCP server started (PID: $!)"
+PID=$!
+echo $PID > /var/run/mcp/tcp.pid
+echo "MCP TCP server started (PID: $PID)"
 EOF
 chmod +x /app/start-mcp-tcp.sh
 
@@ -72,16 +85,16 @@ cat > /app/stop-mcp-tcp.sh << 'EOF'
 #!/bin/bash
 # Stop MCP TCP Server
 
-if [ -f "/var/run/mcp-tcp.pid" ]; then
-    PID=$(cat /var/run/mcp-tcp.pid)
+if [ -f "/var/run/mcp/tcp.pid" ]; then
+    PID=$(cat /var/run/mcp/tcp.pid)
     if ps -p $PID > /dev/null 2>&1; then
         echo "Stopping MCP TCP server (PID: $PID)..."
         kill $PID
-        rm /var/run/mcp-tcp.pid
+        rm /var/run/mcp/tcp.pid
         echo "MCP TCP server stopped"
     else
         echo "MCP TCP server not running"
-        rm /var/run/mcp-tcp.pid
+        rm /var/run/mcp/tcp.pid
     fi
 else
     echo "MCP TCP server not running (no PID file)"
@@ -94,8 +107,8 @@ cat > /app/status-mcp-tcp.sh << 'EOF'
 #!/bin/bash
 # Check MCP TCP Server status
 
-if [ -f "/var/run/mcp-tcp.pid" ]; then
-    PID=$(cat /var/run/mcp-tcp.pid)
+if [ -f "/var/run/mcp/tcp.pid" ]; then
+    PID=$(cat /var/run/mcp/tcp.pid)
     if ps -p $PID > /dev/null 2>&1; then
         echo "✅ MCP TCP server is running (PID: $PID)"
         echo "   Port: ${MCP_TCP_PORT:-9500}"
@@ -113,7 +126,7 @@ if [ -f "/var/run/mcp-tcp.pid" ]; then
         fi
     else
         echo "❌ MCP TCP server is not running (stale PID file)"
-        rm /var/run/mcp-tcp.pid
+        rm /var/run/mcp/tcp.pid
     fi
 else
     echo "❌ MCP TCP server is not running"
@@ -128,10 +141,12 @@ if [ "${MCP_TCP_AUTOSTART}" = "true" ] || [ "${MCP_ENABLE_TCP}" = "true" ]; then
 fi
 
 # 8. Update bashrc with new aliases
-if [ -f "/home/dev/.bashrc" ]; then
+BASHRC_FILE="/home/dev/.bashrc"
+if [ -f "$BASHRC_FILE" ]; then
     # Check if aliases already added
-    if ! grep -q "mcp-tcp-start" /home/dev/.bashrc; then
-        cat >> /home/dev/.bashrc << 'EOF'
+    if ! grep -q "mcp-tcp-start" "$BASHRC_FILE"; then
+        # Add aliases as dev user to ensure proper ownership
+        sudo -u dev bash -c "cat >> '$BASHRC_FILE' << 'EOF'
 
 # MCP TCP Server Management
 alias mcp-tcp-start='/app/start-mcp-tcp.sh'
@@ -139,16 +154,30 @@ alias mcp-tcp-stop='/app/stop-mcp-tcp.sh'
 alias mcp-tcp-status='/app/status-mcp-tcp.sh'
 alias mcp-tcp-restart='/app/stop-mcp-tcp.sh && /app/start-mcp-tcp.sh'
 alias mcp-tcp-logs='tail -f /app/mcp-logs/tcp-server.log'
-alias mcp-tcp-test='echo "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"initialize\",\"params\":{}}" | nc localhost ${MCP_TCP_PORT:-9500}'
+alias mcp-tcp-test='echo \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\\\"1\\\",\\\"method\\\":\\\"initialize\\\",\\\"params\\\":{}}\" | nc localhost \${MCP_TCP_PORT:-9500}'
 
 # Quick TCP connection test
 mcp-test-tcp() {
-    local port=${1:-9500}
-    echo "Testing MCP TCP connection on port $port..."
-    echo '{"jsonrpc":"2.0","id":"test","method":"tools/list","params":{}}' | nc -w 2 localhost $port
+    local port=\${1:-9500}
+    echo \"Testing MCP TCP connection on port \$port...\"
+    echo '{\"jsonrpc\":\"2.0\",\"id\":\"test\",\"method\":\"tools/list\",\"params\":{}}' | nc -w 2 localhost \$port
 }
-EOF
+EOF"
         echo "✅ TCP server aliases added to bashrc"
+        
+        # Also add to /etc/bash.bashrc for global availability
+        if ! grep -q "mcp-tcp-start" /etc/bash.bashrc; then
+            cat >> /etc/bash.bashrc << 'EOF'
+
+# MCP TCP Server Management (Global)
+alias mcp-tcp-start='/app/start-mcp-tcp.sh'
+alias mcp-tcp-stop='/app/stop-mcp-tcp.sh'
+alias mcp-tcp-status='/app/status-mcp-tcp.sh'
+alias mcp-tcp-restart='/app/stop-mcp-tcp.sh && /app/start-mcp-tcp.sh'
+alias mcp-tcp-logs='tail -f /app/mcp-logs/tcp-server.log'
+EOF
+            echo "✅ TCP server aliases added to global bashrc"
+        fi
     fi
 fi
 

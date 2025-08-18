@@ -112,6 +112,8 @@ RUN apt-get update && \
     imagemagick \
     inkscape \
     ffmpeg \
+    libavformat-dev libavcodec-dev libavdevice-dev \
+    libavutil-dev libavfilter-dev libswscale-dev libswresample-dev \
     colmap \
     libpng-dev libjpeg-dev libtiff-dev libopenexr-dev && \
     rm -rf /var/lib/apt/lists/*
@@ -176,10 +178,19 @@ RUN /opt/venv312/bin/pip install --no-cache-dir --retries 10 --timeout 60 \
     torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
 # ---------- Rust tool-chain (AVX‑512) ----------
-ENV PATH="/root/.cargo/bin:${PATH}"
-# Update certificates and install Rust with retry logic
-RUN apt-get update && apt-get install -y ca-certificates && \
-    for i in 1 2 3; do curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && break || sleep 5; done
+# Switch to the dev user to install Rust in their home directory
+USER dev
+WORKDIR /home/dev
+
+# Install Rust as the dev user with retry logic
+RUN for i in 1 2 3; do curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path && break || sleep 5; done
+
+# Add cargo to the PATH for all subsequent users and the final image
+ENV PATH="/home/dev/.cargo/bin:${PATH}"
+
+# Switch back to root for subsequent system-wide installations
+USER root
+WORKDIR $APP_HOME
 
 # ---------- WasmEdge (with OpenVINO backend) ----------
 RUN curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install.sh | \
@@ -216,6 +227,11 @@ COPY AGENT-BRIEFING.md /app/
 # Configure git for the dev user
 RUN git config --global user.email "agent@multi-agent-docker.com" && \
     git config --global user.name "Development Agent"
+
+# Grant sudo access to the dev user
+USER root
+RUN echo "dev ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+USER dev
 
 # 11. Final Setup
 # Copy supervisord config

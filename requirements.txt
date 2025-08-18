@@ -8,7 +8,11 @@ pylint
 # New 2D/3D Additions
 open3d
 pymeshlab
-nerfstudio
+# Note: nerfstudio requires PyAV which has Cython compilation issues
+# If you need nerfstudio, install it separately after the base image is built:
+# pip install nerfstudio
+# For now, commenting it out to ensure the build succeeds
+# nerfstudio
 # Note: gaussian-splatting-pytorch is not a standard PyPI package name.
 # A specific implementation will need to be installed via pip git+https,
 # which can be added later once a repository is chosen.

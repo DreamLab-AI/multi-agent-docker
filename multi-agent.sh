@@ -60,9 +60,10 @@ preflight() {
     mkdir -p "./.agent-mount/ext"
   fi
 
-  # Set proper permissions for container user (UID 1000)
+  # Set proper permissions for container user
+  # Use variables from .env file, with 1000 as a fallback
   if command -v chown >/dev/null 2>&1; then
-    chown -R 1000:1000 "./workspace" "./blender-files" "./pbr_outputs" "./.agent-mount" 2>/dev/null || echo "Warning: Could not set ownership (this is normal on some systems)"
+    chown -R "${HOST_UID:-1000}:${HOST_GID:-1000}" "./workspace" "./blender-files" "./pbr_outputs" "./.agent-mount" 2>/dev/null || echo "Warning: Could not set ownership (this is normal on some systems)"
   fi
 
   # Ensure directories are writable
@@ -77,6 +78,10 @@ preflight() {
   if [[ ! -f "$ENVFILE" ]]; then
     echo "Creating default .env file..."
     cat > "$ENVFILE" <<EOF
+# User/Group IDs for file permissions
+HOST_UID=$(id -u)
+HOST_GID=$(id -g)
+
 # Resource limits
 DOCKER_CPUS=$DOCKER_CPUS
 DOCKER_MEMORY=$DOCKER_MEMORY
