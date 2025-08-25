@@ -4,11 +4,9 @@ set -e
 echo "=== MCP 3D Environment Starting ==="
 echo "Container IP: $(hostname -I)"
 
-# Ensure the dev user owns the workspace and the external mount
-chown -R dev:dev /workspace
-if [ -d "/workspace/ext" ]; then
-  chown -R dev:dev /workspace/ext
-fi
+# The dev user inside the container is created with the same UID/GID as the
+# host user, so chown is not necessary and can cause permission errors on
+# bind mounts. The file permissions should already be correct.
 
 # Ensure the supervisor directory exists
 mkdir -p /workspace/.supervisor
