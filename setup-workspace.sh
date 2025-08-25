@@ -350,6 +350,12 @@ update_claude_md
 
 # --- Final Summary ---
 show_setup_summary() {
+    # Create the completion marker file to hide the welcome message
+    if [ "$DRY_RUN" = false ]; then
+        touch /workspace/.setup_completed
+        chown dev:dev /workspace/.setup_completed
+    fi
+
     echo ""
     echo "=== ✅ Enhanced Setup Complete ==="
     echo ""

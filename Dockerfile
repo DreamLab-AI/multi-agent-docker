@@ -201,6 +201,7 @@ RUN curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/i
     ldconfig
 
 # 10. Switch to the dev user
+RUN mkdir -p /workspace && chown -R dev:dev /workspace
 USER dev
 WORKDIR /workspace
 
@@ -240,8 +241,29 @@ USER dev
 # Copy supervisord config
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Copy the welcome script to profile.d and make it executable
-COPY --chmod=0755 core-assets/scripts/00-welcome.sh /etc/profile.d/00-welcome.sh
+# Add a one-time welcome message with setup instructions to the system-wide bashrc
+USER root
+RUN echo '\n\
+if [ ! -f "/workspace/.setup_completed" ]; then\n\
+    echo "";\n\
+    echo "--- 🚀 Welcome to the Multi-Agent Docker Environment ---";\n\
+    echo "";\n\
+    echo "To complete your one-time setup, please run the following commands in order:";\n\
+    echo "";\n\
+    echo "1. Initialize the Claude Flow workspace (this may require auth):";\n\
+    echo "   npx claude-flow@alpha init --force";\n\
+    echo "";\n\
+    echo "2. Run the environment enhancement script:";\n\
+    echo "   /app/setup-workspace.sh";\n\
+    echo "";\n\
+    echo "3. Reload your shell to activate all aliases and settings:";\n\
+    echo "   source ~/.bashrc";\n\
+    echo "";\n\
+    echo "This message will disappear after you run the setup script.";\n\
+    echo "--------------------------------------------------------";\n\
+    echo "";\n\
+fi\n' >> /etc/bash.bashrc
+USER dev
 
 # Set the entrypoint
 ENTRYPOINT ["/entrypoint.sh"]
