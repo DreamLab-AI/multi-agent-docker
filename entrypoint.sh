@@ -4,9 +4,13 @@ set -e
 echo "=== MCP 3D Environment Starting ==="
 echo "Container IP: $(hostname -I)"
 
+# Ensure the dev user owns their home directory to prevent permission
+# issues with npx, cargo, etc. This is safe to run on every start.
+chown -R dev:dev /home/dev
+
 # The dev user inside the container is created with the same UID/GID as the
-# host user, so chown is not necessary and can cause permission errors on
-# bind mounts. The file permissions should already be correct.
+# host user, so a recursive chown on /workspace is not necessary and can
+# cause permission errors on bind mounts.
 
 # Ensure the supervisor directory exists
 mkdir -p /workspace/.supervisor

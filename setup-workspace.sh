@@ -69,6 +69,17 @@ fi
 echo "🚀 Initializing enhanced Multi-Agent workspace..."
 [ "$DRY_RUN" = true ] && echo "🔍 DRY RUN MODE - No changes will be made"
 
+# --- Claude Code Home Directory Workaround ---
+log_info "Applying workaround for Claude Code home directory..."
+if [ ! -d "/home/ubuntu" ]; then
+    if dry_run_log "Would create symlink /home/ubuntu -> /home/dev"; then :; else
+        ln -s /home/dev /home/ubuntu
+        log_success "Created symlink /home/ubuntu -> /home/dev for Claude Code compatibility."
+    fi
+else
+    log_info "Directory /home/ubuntu already exists, skipping symlink."
+fi
+
 # --- Helper Functions for File Operations ---
 copy_if_missing() {
     local src="$1"
@@ -199,6 +210,30 @@ add_mcp_aliases() {
     if dry_run_log "Would add MCP aliases to $bashrc_file"; then return 0; fi
 
     read -r -d '' BASHRC_ADDITIONS << 'EOF'
+
+# --- 🚀 Welcome & Setup Instructions ---
+if [ -z "$SETUP_COMPLETED" ]; then
+    echo ""
+    echo "--- 🚀 Welcome to the Multi-Agent Docker Environment ---"
+    echo ""
+    echo "To complete your one-time setup, please run the following commands in order:"
+    echo ""
+    echo "1. Authenticate with Claude (only if this is your first time):"
+    echo "   claude auth"
+    echo ""
+    echo "2. Initialize the Claude Flow workspace:"
+    echo "   npx claude-flow@alpha init --force"
+    echo ""
+    echo "3. Run the environment enhancement script:"
+    echo "   /app/setup-workspace.sh"
+    echo ""
+    echo "4. Reload your shell to activate all aliases and settings:"
+    echo "   source ~/.bashrc"
+    echo ""
+    echo "You can set 'export SETUP_COMPLETED=true' in this file to hide this message."
+    echo "--------------------------------------------------------"
+    echo ""
+fi
 
 # MCP Server Management (supervisorctl-based)
 alias mcp-tcp-start='supervisorctl -c /etc/supervisor/conf.d/supervisord.conf start mcp-tcp-server'
