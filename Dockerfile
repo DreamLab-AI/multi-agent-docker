@@ -143,16 +143,19 @@ RUN chmod +x /app/setup-workspace.sh && chmod +x /app/mcp-helper.sh
 # Log directory is now created during user setup
 
 # 9. Install Node.js packages
-# Install global Node.js packages
-RUN npm install -g \
+# Clear npm cache and install fresh versions of critical packages
+RUN npm cache clean --force && \
+    npm install -g \
     gltf-pipeline \
-    claude-flow@alpha \
-    ruv-swarm@latest \
+    sqlite3 --unsafe-perm
+
+# Install critical packages with cache busting to ensure latest versions
+RUN npm cache clean --force && \
+    npm install -g --no-cache claude-flow@alpha && \
+    npm install -g --no-cache @anthropic-ai/claude-code@latest && \
+    npm install -g ruv-swarm@latest \
     @google/gemini-cli@latest \
-    @openai/codex@latest && \
-    # Install claude-code separately to avoid potential npm conflicts
-    npm install -g @anthropic-ai/claude-code@latest && \
-    npm install -g sqlite3 --unsafe-perm
+    @openai/codex@latest
 
 # Grant dev user permissions to update global npm packages
 RUN chown -R dev:dev "$(npm config get prefix)/lib/node_modules" && \

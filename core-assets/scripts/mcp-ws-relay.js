@@ -16,10 +16,10 @@ wss.on('connection', (ws, req) => {
 
     // For each new WebSocket connection, spawn a dedicated claude-flow MCP process.
     // This provides perfect session isolation.
-    const mcpProcess = spawn('npx', ['claude-flow@alpha', 'mcp', 'start', '--stdio'], {
-        cwd: '/workspace', // Run in the context of the user's workspace
-        stdio: ['pipe', 'pipe', 'pipe'] // stdin, stdout, stderr
-    });
+    const mcpProcess = spawn('npx', ['claude-flow@alpha', 'mcp', 'start', '--stdio', '--file', '/workspace/.mcp.json'], {
+       cwd: '/workspace', // Run in the context of the user's workspace
+       stdio: ['pipe', 'pipe', 'pipe'] // stdin, stdout, stderr
+   });
 
     console.log(`[MCP Bridge] Spawned claude-flow MCP process with PID: ${mcpProcess.pid}`);
 
