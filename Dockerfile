@@ -240,6 +240,10 @@ USER dev
 # Copy supervisord config
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
+# Copy the welcome script to profile.d to show instructions on login
+COPY core-assets/scripts/00-welcome.sh /etc/profile.d/00-welcome.sh
+RUN chmod +x /etc/profile.d/00-welcome.sh
+
 # Set the entrypoint
 ENTRYPOINT ["/entrypoint.sh"]
 
