@@ -237,33 +237,34 @@ USER root
 RUN echo "dev ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 USER dev
 
+# --- Shell Configuration ---
+# Set up the bash environment for the dev user
+RUN echo '\n\
+# --- Custom Environment Setup ---\n\
+# Display welcome message\n\
+if [ -f "/app/core-assets/scripts/welcome-message.sh" ]; then\n\
+    source "/app/core-assets/scripts/welcome-message.sh"\n\
+fi\n\
+\n\
+# --- PATH Configuration ---\n\
+# Add Python venv to PATH\n\
+export PATH="/opt/venv312/bin:$PATH"\n\
+\n\
+# Add Cargo to PATH\n\
+export PATH="/home/dev/.cargo/bin:$PATH"\n\
+\n\
+# Add Deno to PATH\n\
+export DENO_INSTALL="/root/.deno"\n\
+export PATH="$DENO_INSTALL/bin:$PATH"\n\
+\n\
+# Add global npm packages to PATH\n\
+if [ -d "$(npm config get prefix)/bin" ]; then\n\
+    export PATH="$(npm config get prefix)/bin:$PATH"\n\
+fi\n' >> /home/dev/.bashrc
+
 # 11. Final Setup
 # Copy supervisord config
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-# Add a one-time welcome message with setup instructions to the system-wide bashrc
-USER root
-RUN echo '\n\
-if [ ! -f "/workspace/.setup_completed" ]; then\n\
-    echo "";\n\
-    echo "--- 🚀 Welcome to the Multi-Agent Docker Environment ---";\n\
-    echo "";\n\
-    echo "To complete your one-time setup, please run the following commands in order:";\n\
-    echo "";\n\
-    echo "1. Initialize the Claude Flow workspace (this may require auth):";\n\
-    echo "   npx claude-flow@alpha init --force";\n\
-    echo "";\n\
-    echo "2. Run the environment enhancement script:";\n\
-    echo "   /app/setup-workspace.sh";\n\
-    echo "";\n\
-    echo "3. Reload your shell to activate all aliases and settings:";\n\
-    echo "   source ~/.bashrc";\n\
-    echo "";\n\
-    echo "This message will disappear after you run the setup script.";\n\
-    echo "--------------------------------------------------------";\n\
-    echo "";\n\
-fi\n' >> /etc/bash.bashrc
-USER dev
 
 # Set the entrypoint
 ENTRYPOINT ["/entrypoint.sh"]
