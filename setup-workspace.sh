@@ -168,7 +168,7 @@ setup_toolchain_paths() {
     local profile_script="/etc/profile.d/multi-agent-paths.sh"
     if dry_run_log "Would create/update $profile_script"; then return 0; fi
     log_info "🛠️  Setting up enhanced PATH for toolchains..."
-    
+
     cat > "$profile_script" << 'EOF'
 #!/bin/sh
 prepend_path() {
@@ -183,7 +183,7 @@ prepend_path "/home/dev/.local/bin"
 prepend_path "/home/dev/.deno/bin"
 prepend_path "/opt/oss-cad-suite/bin"
 EOF
-    
+
     chmod +x "$profile_script"
     log_success "Created toolchain PATH configuration: $profile_script"
 }
@@ -262,7 +262,7 @@ add_mcp_aliases
 # 5. Validate and fix Rust toolchain availability
 validate_rust_toolchain() {
     log_info "🦀 Validating Rust toolchain availability..."
-    
+
     log_info_def=$(declare -f log_info)
 
     sudo -u dev bash -c "
@@ -270,7 +270,7 @@ validate_rust_toolchain() {
 
         source /etc/profile.d/multi-agent-paths.sh
         if [ -f \"\$HOME/.cargo/env\" ]; then source \"\$HOME/.cargo/env\"; fi
-        
+
         if ! command -v cargo >/dev/null 2>&1; then
             log_info \"Cargo not found, attempting to reinstall Rust toolchain...\"
             if curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path; then
@@ -280,7 +280,7 @@ validate_rust_toolchain() {
                 echo \"❌ Failed to reinstall Rust toolchain\"
             fi
         fi
-        
+
         log_info \"Rustc: \$(rustc --version)\"
         log_info \"Cargo: \$(cargo --version)\"
     "
@@ -301,19 +301,19 @@ update_claude_md() {
         log_info "Skipping CLAUDE.md updates (SETUP_APPEND_CLAUDE_DOC is not 'true')"
         return 0
     fi
-    
+
     if [ ! -f "$claude_md" ]; then
         log_warning "CLAUDE.md not found, cannot append info."
         return 1
     fi
-    
+
     if grep -q "$marker" "$claude_md"; then
         log_info "CLAUDE.md already contains additional services info"
         return 0
     fi
-    
+
     if dry_run_log "Would append service and context info to $claude_md"; then return 0; fi
-    
+
     cat >> "$claude_md" << 'EOF'
 
 ## 🔌 Additional Services & Development Context
@@ -348,6 +348,93 @@ EOF
 
 update_claude_md
 
+# 7. Patch MCP server to fix hardcoded version and method routing
+patch_mcp_server() {
+    log_info "🔧 Patching MCP server to fix version and method routing..."
+
+    # Find the MCP server file in the npm cache
+    local mcp_server_path=$(find /home/ubuntu/.npm/_npx -name "mcp-server.js" -path "*/claude-flow/src/mcp/*" 2>/dev/null | head -1)
+
+    if [ -z "$mcp_server_path" ]; then
+        log_warning "MCP server not found in npm cache, skipping patches"
+        return 1
+    fi
+
+    log_info "Found MCP server at: $mcp_server_path"
+
+    if dry_run_log "Would patch MCP server at $mcp_server_path"; then return 0; fi
+
+    # Patch 1: Fix hardcoded version
+    if grep -q "this.version = '2.0.0-alpha.59'" "$mcp_server_path"; then
+        log_info "Patching hardcoded version..."
+        sed -i.bak "s|this.version = '2.0.0-alpha.59'|// PATCHED: Dynamic version from package.json\n    try {\n      this.version = require('../../package.json').version;\n    } catch (e) {\n      this.version = '2.0.0-alpha.101'; // Fallback\n    }|" "$mcp_server_path"
+        log_success "Patched MCP server version"
+    else
+        log_info "Version patch already applied or not needed"
+    fi
+
+    # Patch 2: Fix method routing to support direct tool calls
+    if ! grep -q "PATCHED: Check if method is a direct tool call" "$mcp_server_path"; then
+        log_info "Patching method routing for direct tool calls..."
+
+        # Create a temporary file with the patch
+        cat > /tmp/mcp_patch.txt << 'PATCH_EOF'
+        default:
+          // PATCHED: Check if method is a direct tool call
+          if (this.tools[method]) {
+            console.error(
+              `[${new Date().toISOString()}] INFO [claude-flow-mcp] Direct tool call: ${method}`
+            );
+            // Route direct tool calls to handleToolCall
+            return this.handleToolCall(id, { name: method, arguments: params });
+          }
+          return this.createErrorResponse(id, -32601, 'Method not found');
+PATCH_EOF
+
+        # Apply the patch by replacing the default case in handleMessage
+        awk '
+        /default:.*Method not found/ {
+            while ((getline line < "/tmp/mcp_patch.txt") > 0) {
+                print line
+            }
+            close("/tmp/mcp_patch.txt")
+            # Skip the original line
+            next
+        }
+        { print }
+        ' "$mcp_server_path" > "${mcp_server_path}.patched"
+
+        if [ -f "${mcp_server_path}.patched" ]; then
+            mv "${mcp_server_path}.patched" "$mcp_server_path"
+            log_success "Patched MCP server method routing"
+        else
+            log_warning "Failed to apply method routing patch"
+        fi
+
+        rm -f /tmp/mcp_patch.txt
+    else
+        log_info "Method routing patch already applied"
+    fi
+
+    # Restart MCP TCP server to apply patches
+    if command -v supervisorctl >/dev/null 2>&1; then
+        log_info "Restarting MCP TCP server to apply patches..."
+        supervisorctl -c /etc/supervisor/conf.d/supervisord.conf restart mcp-tcp-server 2>/dev/null || {
+            # Try killing the process directly if supervisorctl fails
+            local mcp_pid=$(pgrep -f "mcp-tcp-server.js" | head -1)
+            if [ -n "$mcp_pid" ]; then
+                kill -HUP "$mcp_pid" 2>/dev/null && log_success "Sent reload signal to MCP server (PID: $mcp_pid)"
+            fi
+        }
+    fi
+}
+
+if [ "$DRY_RUN" = false ]; then
+    patch_mcp_server
+else
+    dry_run_log "Would patch MCP server"
+fi
+
 # --- Final Summary ---
 show_setup_summary() {
     # Create the completion marker file to hide the welcome message
@@ -359,19 +446,19 @@ show_setup_summary() {
     echo ""
     echo "=== ✅ Enhanced Setup Complete ==="
     echo ""
-    
+
     if [ "$DRY_RUN" = true ]; then
         echo "🔍 DRY RUN COMPLETE - No changes were made."
         return 0
     fi
-    
+
     echo "📋 Setup Summary:"
     echo "  - Merged MCP configuration into .mcp.json"
     echo "  - Configured toolchain PATHs in /etc/profile.d/"
     echo "  - Added supervisorctl-based aliases to .bashrc"
     echo "  - Appended environment context to CLAUDE.md"
     echo ""
-    
+
     echo "🛠️  Key Commands:"
     echo "  - mcp-tcp-status, mcp-ws-status"
     echo "  - mcp-test-health, validate-toolchains"
@@ -383,5 +470,3 @@ show_setup_summary() {
     echo "  - Claude cannot build or see external Docker services."
     echo ""
 }
-
-show_setup_summary
