@@ -327,15 +327,17 @@ This environment is enhanced with several services and a specific development wo
 - **GUI Tools**: via `gui-tools-service` (Blender:9876, QGIS:9877, PBR:9878).
 
 ### Development Context
-- **Project Root**: Your project is mounted at `/workspace/ext/`.
+- **Project Root**: Your project is mounted at `ext/`.
+- **Always read the current state of ext/task.md**
+- **Always update task.md with your progress, removing elements that are confirmed as working by the user**
 - **Execution Environment**: Claude operates within this Docker container. It cannot build external Docker images or see services running on your host machine.
 - **Available Toolchains**: You can validate your code using tools inside this container, such as `cargo check`, `npm test`, or `python -m py_compile`.
 
 ### Quick Commands
 ```bash
 # Check code without a full build
-cargo check         # For Rust projects in /workspace/ext
-npm run test        # For Node.js projects in /workspace/ext
+cargo check         # For Rust projects in ext/
+npm run test        # For Node.js projects in ext/
 
 # Manage and test MCP services
 mcp-tcp-status
@@ -465,7 +467,7 @@ show_setup_summary() {
     echo ""
 
     echo "💡 Development Context:"
-    echo "  - Your project root is in: /workspace/ext/"
+    echo "  - Your project root is in: ext/"
     echo "  - Use internal tools like 'cargo check' to validate your work."
     echo "  - Claude cannot build or see external Docker services."
     echo ""
