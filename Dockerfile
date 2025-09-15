@@ -157,6 +157,38 @@ RUN npm cache clean --force && \
     @google/gemini-cli@latest \
     @openai/codex@latest
 
+# Install Cursor CLI
+RUN curl https://cursor.com/install -fsS | bash
+
+# --- BEGIN RECOMMENDED CHANGE ---
+
+# 10. Copy and Apply Patches
+# Copy the consolidated patches into a temporary location in the image
+COPY patches/ /app/patches/
+
+# Apply the patches to the installed claude-flow package
+# This RUN command finds the package and applies all .patch files
+RUN \
+    # Find the root directory of the globally installed claude-flow package
+    CLAUDE_FLOW_PATH=$(npm root -g)/claude-flow && \
+    \
+    # Check if the directory was found
+    if [ -d "$CLAUDE_FLOW_PATH" ]; then \
+        echo "✅ Found claude-flow at $CLAUDE_FLOW_PATH, applying patches..."; \
+        # Loop through all patch files and apply them
+        for patch_file in /app/patches/*.patch; do \
+            echo "Applying patch: $(basename "$patch_file")"; \
+            # The -p1 strips the 'a/' and 'b/' prefixes from the file paths in the patch
+            patch -p1 -d "$CLAUDE_FLOW_PATH" < "$patch_file" || (echo "❌ Failed to apply patch $(basename "$patch_file")" && exit 1); \
+        done; \
+    else \
+        echo "❌ ERROR: claude-flow package path not found. Cannot apply patches." && exit 1; \
+    fi && \
+    # Clean up the patches directory after applying
+    rm -rf /app/patches
+
+# --- END RECOMMENDED CHANGE ---
+
 # Grant dev user permissions to update global npm packages
 RUN chown -R dev:dev "$(npm config get prefix)/lib/node_modules" && \
     chown dev:dev "$(npm config get prefix)/bin/gltf-pipeline" \
@@ -212,9 +244,6 @@ COPY --chown=dev:dev core-assets/ /app/core-assets/
 USER root
 RUN cd /app/core-assets/scripts && npm install && chown -R dev:dev /app/core-assets/scripts/node_modules
 
-# Copy MCP patches
-COPY core-assets/patches /app/patches
-
 # Create necessary directories for MCP
 RUN mkdir -p /var/run/mcp /app/mcp-logs && \
     chown -R dev:dev /var/run/mcp /app/mcp-logs
@@ -235,6 +264,39 @@ RUN git config --global user.email "agent@multi-agent-docker.com" && \
 # Grant sudo access to the dev user
 USER root
 RUN echo "dev ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+# --- BEGIN WORKSPACE SETUP ---
+
+# 1. Claude Code Home Directory Workaround
+RUN ln -s /home/dev /home/ubuntu
+
+# 2. Copy essential assets to the workspace
+COPY --chown=dev:dev core-assets/mcp-tools/ /workspace/mcp-tools/
+COPY --chown=dev:dev core-assets/scripts/ /workspace/scripts/
+COPY --chown=dev:dev mcp-helper.sh /workspace/mcp-helper.sh
+RUN chmod +x /workspace/mcp-helper.sh
+
+# 3. Set up MCP configuration
+COPY --chown=dev:dev core-assets/mcp.json /workspace/.mcp.json
+
+# 4. Setup toolchain paths
+RUN echo '#!/bin/sh\n\
+prepend_path() {\n\
+    if [ -d "$1" ] && ! echo "$PATH" | grep -q -s "$1"; then\n\
+        export PATH="$1:$PATH"\n\
+    fi\n\
+}\n\
+prepend_path "/home/dev/.cargo/bin"\n\
+prepend_path "/opt/venv312/bin"\n\
+prepend_path "/home/dev/.npm-global/bin"\n\
+prepend_path "/home/dev/.local/bin"\n\
+prepend_path "/home/dev/.deno/bin"\n\
+prepend_path "/opt/oss-cad-suite/bin"\n\
+' > /etc/profile.d/multi-agent-paths.sh && \
+    chmod +x /etc/profile.d/multi-agent-paths.sh
+
+# --- END WORKSPACE SETUP ---
+
 USER dev
 
 # --- Shell Configuration ---
@@ -260,7 +322,92 @@ export PATH="$DENO_INSTALL/bin:$PATH"\n\
 # Add global npm packages to PATH\n\
 if [ -d "$(npm config get prefix)/bin" ]; then\n\
     export PATH="$(npm config get prefix)/bin:$PATH"\n\
-fi\n' >> /home/dev/.bashrc
+fi\n\
+\n\
+# MCP Server Management (supervisorctl-based)\n\
+alias mcp-tcp-start="supervisorctl -c /etc/supervisor/conf.d/supervisord.conf start mcp-tcp-server"\n\
+alias mcp-tcp-stop="supervisorctl -c /etc/supervisor/conf.d/supervisord.conf stop mcp-tcp-server"\n\
+alias mcp-tcp-status="supervisorctl -c /etc/supervisor/conf.d/supervisord.conf status mcp-tcp-server"\n\
+alias mcp-tcp-restart="supervisorctl -c /etc/supervisor/conf.d/supervisord.conf restart mcp-tcp-server"\n\
+alias mcp-tcp-logs="tail -f /app/mcp-logs/mcp-tcp-server.log"\n\
+alias mcp-ws-start="supervisorctl -c /etc/supervisor/conf.d/supervisord.conf start mcp-ws-bridge"\n\
+alias mcp-ws-stop="supervisorctl -c /etc/supervisor/conf.d/supervisord.conf stop mcp-ws-bridge"\n\
+alias mcp-ws-status="supervisorctl -c /etc/supervisor/conf.d/supervisord.conf status mcp-ws-bridge"\n\
+alias mcp-ws-restart="supervisorctl -c /etc/supervisor/conf.d/supervisord.conf restart mcp-ws-bridge"\n\
+alias mcp-ws-logs="tail -f /app/mcp-logs/mcp-ws-bridge.log"\n\
+\n\
+# Claude Code Aliases\n\
+alias dsp="claude --dangerously-skip-permissions"\n\
+\n\
+# Quick MCP testing functions\n\
+mcp-test-tcp() {\n\
+    local port=${1:-9500}\n\
+    echo "Testing MCP TCP connection on port $port..."\n\
+    echo "{\\"jsonrpc\\":\\"2.0\\",\\"id\\":\\"test\\",\\"method\\":\\"tools/list\\",\\"params\\":{}}" | nc -w 2 localhost $port\n\
+}\n\
+mcp-test-health() {\n\
+    echo "Testing MCP health endpoint..."\n\
+    curl -s http://127.0.0.1:9501/health | jq . 2>/dev/null || curl -s http://127.0.0.1:9501/health\n\
+}\n\
+\n\
+# Toolchain validation function\n\
+validate-toolchains() {\n\
+    echo "=== Toolchain Validation ===="\n\
+    printf "Rust cargo: "\n\
+    if command -v cargo >/dev/null; then cargo --version; else echo "Not found"; fi\n\
+    printf "Python venv: "\n\
+    if command -v python >/dev/null; then python --version; else echo "Not found"; fi\n\
+    printf "Node.js: "\n\
+    if command -v node >/dev/null; then node --version; else echo "Not found"; fi\n\
+    printf "Deno: "\n\
+    if command -v deno >/dev/null; then deno --version | head -n 1; else echo "Not found"; fi\n\
+    printf "JQ: "\n\
+    if command -v jq >/dev/null; then jq --version; else echo "Not found"; fi\n\
+}\n\
+\n\
+# --- Development Context ---\n\
+echo "## 🔌 Additional Services & Development Context"\n\
+echo ""\n\
+echo "### MCP Services Available"\n\
+echo "- **TCP Server**: \`localhost:9500\` for external controllers."\n\
+echo "- **WebSocket Bridge**: \`localhost:3002\` for browser-based tools."\n\
+echo "- **Health Check**: \`localhost:9501/health\` for service monitoring."\n\
+echo "- **GUI Tools**: via \`gui-tools-service\` (Blender:9876, QGIS:9877, PBR:9878)."\n\
+echo ""\n\
+echo "### Development Context"\n\
+echo "- **Project Root**: Your project is mounted at \`ext/\`."\n\
+echo "- **Always read the current state of ext/task.md**"\n\
+echo "- **Always update task.md with your progress, removing elements that are confirmed as working by the user**"\n\
+echo "- **Execution Environment**: Claude operates within this Docker container. It cannot build external Docker images or see services running on your host machine."\n\
+echo "- **Available Toolchains**: You can validate your code using tools inside this container, such as \`cargo check\`, \`npm test\`, or \`python -m py_compile\`."\n\
+echo ""\n\
+echo "### Quick Commands"\n\
+echo "\`\`\`bash"\n\
+echo "# Check code without a full build"\n\
+echo "cargo check         # For Rust projects in ext/"\n\
+echo "npm run test        # For Node.js projects in ext/"\n\
+echo ""\n\
+echo "# Manage and test MCP services"\n\
+echo "mcp-tcp-status"\n\
+echo "mcp-test-health"\n\
+echo "validate-toolchains"\n\
+echo "\`\`\`"\n\
+\n\
+echo "### AI Agent CLIs Available"\n\
+echo "Before first use, you need to log in to each service:"\n\
+echo "\`\`\`bash"\n\
+echo "# Anthropic Claude"\n\
+echo "claude login"\n\
+echo ""\n\
+echo "# OpenAI Codex"\n\
+echo "codex"\n\
+echo ""\n\
+echo "# Google Gemini"\n\
+echo "gemini"\n\
+echo ""\n\
+echo "# Cursor"\n\
+echo "cursor-agent login"\n\
+echo "\`\`\`"\n' >> /home/dev/.bashrc
 
 # 11. Final Setup
 # Copy supervisord config
