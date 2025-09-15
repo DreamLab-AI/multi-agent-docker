@@ -1,0 +1,40 @@
+--- a/src/mcp/mcp-server.js
++++ b/src/mcp/mcp-server.js
+@@ -1140,10 +1140,11 @@ class ClaudeFlowMCPServer {
+       case 'agent_spawn':
+         const agentId = `agent_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+         const resolvedType = resolveLegacyAgentType(args.type);
++        const activeSwarmId = args.swarmId || (await this.getActiveSwarmId());
+         const agentData = {
+           id: agentId,
+-          swarmId: args.swarmId || (await this.getActiveSwarmId()),
++          swarmId: activeSwarmId,
+           name: args.name || `${resolvedType}-${Date.now()}`,
+           type: resolvedType,
+           status: 'active',
+@@ -1157,7 +1158,7 @@ class ClaudeFlowMCPServer {
+ 
+         // Store agent data in memory store (same as npx commands)
+         try {
+-          const swarmId = agentData.swarmId || (await this.getActiveSwarmId());
++          const swarmId = activeSwarmId;
+           if (swarmId) {
+             await this.memoryStore.store(`agent:${swarmId}:${agentId}`, JSON.stringify(agentData), {
+               namespace: 'agents',
+@@ -1183,8 +1184,16 @@ class ClaudeFlowMCPServer {
+         if (global.agentTracker) {
+           global.agentTracker.trackAgent(agentId, {
+             ...agentData,
++            swarmId: activeSwarmId,
+             capabilities: args.capabilities || [],
+           });
++          console.error(
++            `[${new Date().toISOString()}] INFO [claude-flow-mcp] Agent tracked: ${agentId} in swarm: ${activeSwarmId}`,
++          );
++        } else {
++          console.error(
++            `[${new Date().toISOString()}] WARN [claude-flow-mcp] Agent tracker not available, agent ${agentId} not tracked in memory`,
++          );
+         }
+         
+         return {

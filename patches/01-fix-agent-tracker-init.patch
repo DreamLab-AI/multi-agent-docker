@@ -1,0 +1,39 @@
+--- a/src/mcp/mcp-server.js
++++ b/src/mcp/mcp-server.js
+@@ -13,14 +13,31 @@
+ import { memoryStore } from '../memory/fallback-store.js';
+ 
+ // Initialize agent tracker
+-await import('./implementations/agent-tracker.js').catch(() => {
+-  // If ES module import fails, try require
++// PATCHED: Enhanced agent tracker initialization with better error handling
++try {
++  await import('./implementations/agent-tracker.js');
++  console.error(`[${new Date().toISOString()}] INFO [claude-flow-mcp] Agent tracker loaded successfully`);
++} catch (importError) {
++  console.error(`[${new Date().toISOString()}] WARN [claude-flow-mcp] ES module import failed, trying require:`, importError.message);
+   try {
+     require('./implementations/agent-tracker');
+-  } catch (e) {
+-    console.log('Agent tracker not loaded');
++    console.error(`[${new Date().toISOString()}] INFO [claude-flow-mcp] Agent tracker loaded via require`);
++  } catch (requireError) {
++    console.error(`[${new Date().toISOString()}] ERROR [claude-flow-mcp] Agent tracker failed to load:`, requireError.message);
+   }
+-});
++}
++
++// Verify agent tracker is available
++if (global.agentTracker) {
++  console.error(`[${new Date().toISOString()}] INFO [claude-flow-mcp] Agent tracker verified and ready`);
++} else {
++  console.error(`[${new Date().toISOString()}] ERROR [claude-flow-mcp] Agent tracker NOT available - agent tracking will not work!`);
++  // Try to create it manually as fallback
++  try {
++    const AgentTracker = require('./implementations/agent-tracker');
++    global.agentTracker = AgentTracker;
++    console.error(`[${new Date().toISOString()}] INFO [claude-flow-mcp] Agent tracker manually initialized`);
++  } catch (e) {}
++}
+ 
+ // Initialize DAA manager
