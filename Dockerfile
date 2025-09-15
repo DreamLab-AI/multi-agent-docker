@@ -152,10 +152,12 @@ RUN npm cache clean --force && \
 # Install critical packages with cache busting to ensure latest versions
 RUN npm cache clean --force && \
     npm install -g --no-cache claude-flow@alpha && \
-    npm install -g --no-cache @anthropic-ai/claude-code@latest && \
     npm install -g ruv-swarm@latest \
     @google/gemini-cli@latest \
     @openai/codex@latest
+
+# Install claude via install script as root
+RUN curl -fsSL https://claude.ai/install.sh | bash -s 1.0.42
 
 # Grant dev user permissions to update global npm packages
 RUN chown -R dev:dev "$(npm config get prefix)/lib/node_modules" && \
@@ -163,8 +165,7 @@ RUN chown -R dev:dev "$(npm config get prefix)/lib/node_modules" && \
                    "$(npm config get prefix)/bin/claude-flow" \
                    "$(npm config get prefix)/bin/ruv-swarm" \
                    "$(npm config get prefix)/bin/gemini" \
-                   "$(npm config get prefix)/bin/codex" \
-                   "$(npm config get prefix)/bin/claude"
+                   "$(npm config get prefix)/bin/codex"
 
 # ---------- Install Python ML & AI libraries into the 3.12 venv ----------
 # Copy requirements file and install dependencies to leverage Docker layer caching.
