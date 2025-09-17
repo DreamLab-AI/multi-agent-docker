@@ -1,285 +1,215 @@
 #!/usr/bin/env node
 
-/**
- * MCP TCP/Unix Socket Server Wrapper
- * Adds TCP and Unix socket capabilities to claude-flow MCP
- * without modifying the npm package
- */
+// Persistent MCP TCP Server - Fixes agent tracking
+// Maintains single MCP instance across all connections
 
 const { spawn } = require('child_process');
 const net = require('net');
-const fs = require('fs');
-const path = require('path');
+const readline = require('readline');
 
-// Configuration from environment
 const TCP_PORT = process.env.MCP_TCP_PORT || 9500;
-const UNIX_SOCKET = process.env.MCP_UNIX_SOCKET || '/var/run/mcp/claude-flow.sock';
-const ENABLE_TCP = process.env.MCP_ENABLE_TCP !== 'false';
-const ENABLE_UNIX = process.env.MCP_ENABLE_UNIX === 'true';
 const LOG_LEVEL = process.env.MCP_LOG_LEVEL || 'info';
 
-class MCPServerWrapper {
+class PersistentMCPServer {
   constructor() {
-    this.connections = new Map();
-    this.stats = {
-      totalConnections: 0,
-      activeConnections: 0,
-      messagesProcessed: 0,
-      startTime: Date.now()
-    };
+    this.mcpProcess = null;
+    this.mcpInterface = null;
+    this.clients = new Map();
+    this.initialized = false;
+    this.initPromise = null;
   }
 
   log(level, message, ...args) {
     const levels = { debug: 0, info: 1, warn: 2, error: 3 };
     if (levels[level] >= levels[LOG_LEVEL]) {
-      console.log(`[MCP-${level.toUpperCase()}] ${new Date().toISOString()} ${message}`, ...args);
+      console.log(`[PMCP-${level.toUpperCase()}] ${new Date().toISOString()} ${message}`, ...args);
     }
   }
 
-  startTCPServer() {
-    const server = net.createServer((socket) => {
-      const clientAddr = `${socket.remoteAddress}:${socket.remotePort}`;
-      this.log('info', `TCP client connected from ${clientAddr}`);
-      this.stats.totalConnections++;
-      this.stats.activeConnections++;
-      
-      // Spawn dedicated MCP instance for this connection
-      const mcp = spawn('npx', ['claude-flow@alpha', 'mcp', 'start', '--stdio', '--file', '/workspace/.mcp.json'], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        cwd: '/workspace',
-        env: { ...process.env, CLAUDE_FLOW_DIRECT_MODE: 'true' }
-      });
-      
-      // Store connection
-      this.connections.set(clientAddr, { 
-        socket, 
-        mcp, 
-        startTime: Date.now(),
-        messagesIn: 0,
-        messagesOut: 0
-      });
-      
-      // Set up bidirectional pipe with line buffering for JSON-RPC
-      let inBuffer = '';
-      let outBuffer = '';
-      
-      // Socket -> MCP stdin
-      socket.on('data', (data) => {
-        inBuffer += data.toString();
-        const lines = inBuffer.split('\n');
-        inBuffer = lines.pop() || '';
-        
-        lines.forEach(line => {
-          if (line.trim()) {
-            this.connections.get(clientAddr).messagesIn++;
-            this.stats.messagesProcessed++;
-            this.log('debug', `TCP -> MCP [${clientAddr}]: ${line.substring(0, 100)}...`);
-            mcp.stdin.write(line + '\n');
-          }
-        });
-      });
-      
-      // MCP stdout -> Socket
-      mcp.stdout.on('data', (data) => {
-        outBuffer += data.toString();
-        const lines = outBuffer.split('\n');
-        outBuffer = lines.pop() || '';
-        
-        lines.forEach(line => {
-          if (line.trim()) {
-            this.connections.get(clientAddr).messagesOut++;
-            this.log('debug', `MCP -> TCP [${clientAddr}]: ${line.substring(0, 100)}...`);
-            socket.write(line + '\n');
-          }
-        });
-      });
-      
-      // Error handling
-      mcp.stderr.on('data', (data) => {
-        this.log('error', `MCP stderr [${clientAddr}]:`, data.toString());
-      });
-      
-      // Socket error handling
-      socket.on('error', (err) => {
-        this.log('error', `Socket error [${clientAddr}]:`, err.message);
-        this.cleanupConnection(clientAddr);
-      });
-      
-      // Cleanup on disconnect
-      socket.on('close', () => {
-        this.log('info', `TCP client ${clientAddr} disconnected`);
-        this.cleanupConnection(clientAddr);
-      });
-      
-      mcp.on('exit', (code, signal) => {
-        this.log('info', `MCP process for ${clientAddr} exited (code: ${code}, signal: ${signal})`);
-        socket.end();
-        this.cleanupConnection(clientAddr);
-      });
+  async startMCPProcess() {
+    if (this.mcpProcess) return;
+
+    this.log('info', 'Starting persistent MCP process...');
+    this.mcpProcess = spawn('/usr/bin/claude-flow', ['mcp', 'start', '--stdio'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: '/workspace',
+      env: {
+          CLAUDE_FLOW_GLOBAL: '/usr/bin/claude-flow', ...process.env, CLAUDE_FLOW_DIRECT_MODE: 'true' }
     });
-    
-    server.on('error', (err) => {
-      this.log('error', 'TCP server error:', err);
-      if (err.code === 'EADDRINUSE') {
-        this.log('error', `Port ${TCP_PORT} is already in use`);
-        process.exit(1);
+
+    this.mcpInterface = readline.createInterface({
+      input: this.mcpProcess.stdout,
+      crlfDelay: Infinity
+    });
+
+    this.mcpInterface.on('line', (line) => this.handleMCPOutput(line));
+    this.mcpProcess.stderr.on('data', (data) => this.log('debug', `MCP: ${data}`));
+    this.mcpProcess.on('close', (code) => {
+      this.log('error', `MCP exited: ${code}`);
+      this.mcpProcess = null;
+      this.initialized = false;
+      setTimeout(() => this.startMCPProcess(), 5000);
+    });
+
+    await this.initializeMCP();
+  }
+
+  async initializeMCP() {
+    if (this.initialized) return;
+    const initRequest = {
+      jsonrpc: "2.0",
+      id: "init-" + Date.now(),
+      method: "initialize",
+      params: {
+        protocolVersion: "2024-11-05",
+        capabilities: { tools: { listChanged: true }},
+        clientInfo: { name: "tcp-wrapper", version: "1.0.0" }
       }
-    });
-    
-    server.listen(TCP_PORT, '0.0.0.0', () => {
-      this.log('info', `TCP server listening on port ${TCP_PORT}`);
-    });
-    
-    return server;
-  }
-
-  startUnixServer() {
-    // Ensure directory exists
-    const socketDir = path.dirname(UNIX_SOCKET);
-    if (!fs.existsSync(socketDir)) {
-      fs.mkdirSync(socketDir, { recursive: true });
-      this.log('info', `Created socket directory: ${socketDir}`);
-    }
-    
-    // Remove old socket if exists
-    if (fs.existsSync(UNIX_SOCKET)) {
-      fs.unlinkSync(UNIX_SOCKET);
-      this.log('debug', 'Removed existing socket file');
-    }
-    
-    const server = net.createServer((socket) => {
-      const connId = `unix-${Date.now()}`;
-      this.log('info', `Unix socket client connected (${connId})`);
-      this.stats.totalConnections++;
-      this.stats.activeConnections++;
-      
-      // Same logic as TCP but for Unix socket
-      const mcp = spawn('npx', ['claude-flow@alpha', 'mcp', 'start', '--stdio', '--file', '/workspace/.mcp.json'], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        cwd: '/workspace'
-      });
-      
-      this.connections.set(connId, { socket, mcp, startTime: Date.now() });
-      
-      // Bidirectional pipe
-      socket.pipe(mcp.stdin);
-      mcp.stdout.pipe(socket);
-      
-      mcp.stderr.on('data', (data) => {
-        this.log('error', `MCP stderr [${connId}]:`, data.toString());
-      });
-      
-      socket.on('close', () => {
-        this.log('info', `Unix socket client ${connId} disconnected`);
-        this.cleanupConnection(connId);
-      });
-      
-      mcp.on('exit', () => {
-        socket.end();
-        this.cleanupConnection(connId);
-      });
-    });
-    
-    server.listen(UNIX_SOCKET, () => {
-      // Make socket accessible to other containers
-      fs.chmodSync(UNIX_SOCKET, '666');
-      this.log('info', `Unix socket server listening at ${UNIX_SOCKET}`);
-    });
-    
-    return server;
-  }
-
-  cleanupConnection(connId) {
-    const conn = this.connections.get(connId);
-    if (conn) {
-      if (conn.mcp && !conn.mcp.killed) {
-        conn.mcp.kill();
-      }
-      this.connections.delete(connId);
-      this.stats.activeConnections--;
-      
-      const duration = Date.now() - conn.startTime;
-      this.log('debug', `Connection ${connId} lasted ${duration}ms, processed ${conn.messagesIn}/${conn.messagesOut} messages`);
-    }
-  }
-
-  setupHealthCheck() {
-    // Simple HTTP health check endpoint
-    const http = require('http');
-    const healthServer = http.createServer((req, res) => {
-      if (req.url === '/health') {
-        const uptime = Date.now() - this.stats.startTime;
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          status: 'healthy',
-          uptime: uptime,
-          stats: this.stats,
-          tcp: ENABLE_TCP ? `listening on ${TCP_PORT}` : 'disabled',
-          unix: ENABLE_UNIX ? `listening on ${UNIX_SOCKET}` : 'disabled'
-        }));
-      } else {
-        res.writeHead(404);
-        res.end();
-      }
-    });
-    
-    const healthPort = parseInt(process.env.MCP_HEALTH_PORT || '9501');
-    healthServer.listen(healthPort, '127.0.0.1', () => {
-      this.log('info', `Health check endpoint at http://127.0.0.1:${healthPort}/health`);
-    });
-  }
-
-  start() {
-    this.log('info', 'Starting MCP Server Wrapper...');
-    this.log('info', `Configuration: TCP=${ENABLE_TCP}, Unix=${ENABLE_UNIX}`);
-    
-    const servers = [];
-    
-    if (ENABLE_TCP) {
-      servers.push(this.startTCPServer());
-    }
-    
-    if (ENABLE_UNIX) {
-      servers.push(this.startUnixServer());
-    }
-    
-    if (servers.length === 0) {
-      this.log('error', 'No servers enabled! Set MCP_ENABLE_TCP=true or MCP_ENABLE_UNIX=true');
-      process.exit(1);
-    }
-    
-    // Setup health check
-    this.setupHealthCheck();
-    
-    // Graceful shutdown
-    const shutdown = () => {
-      this.log('info', 'Shutting down servers...');
-      this.connections.forEach((conn, id) => {
-        this.log('debug', `Terminating connection ${id}`);
-        if (conn.mcp) conn.mcp.kill();
-        if (conn.socket) conn.socket.end();
-      });
-      
-      setTimeout(() => {
-        this.log('info', 'Shutdown complete');
-        process.exit(0);
-      }, 1000);
     };
-    
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
-    
-    // Status reporting
-    setInterval(() => {
-      this.log('debug', `Status: ${this.stats.activeConnections} active connections, ${this.stats.messagesProcessed} total messages`);
-    }, 30000);
+    return new Promise((resolve) => {
+      this.initPromise = { resolve, id: initRequest.id };
+      this.mcpProcess.stdin.write(JSON.stringify(initRequest) + '\n');
+    });
+  }
+
+  handleMCPOutput(line) {
+    if (!line.startsWith('{')) return;
+    try {
+      const msg = JSON.parse(line);
+      if (this.initPromise && msg.id === this.initPromise.id) {
+        this.initialized = true;
+        this.log('info', 'MCP initialized');
+        this.initPromise.resolve();
+        this.initPromise = null;
+        return;
+      }
+      if (!msg.id) {
+        this.broadcastToClients(line);
+        return;
+      }
+      const clientId = this.findClientByRequestId(msg.id);
+      if (clientId) {
+        const client = this.clients.get(clientId);
+        if (client && client.socket) {
+          client.socket.write(line + '\n');
+        }
+      }
+    } catch (err) {
+      this.log('error', `Parse error: ${err.message}`);
+    }
+  }
+
+  findClientByRequestId(requestId) {
+    for (const [clientId, client] of this.clients) {
+      if (client.pendingRequests && client.pendingRequests.has(requestId)) {
+        client.pendingRequests.delete(requestId);
+        return clientId;
+      }
+    }
+    return null;
+  }
+
+  broadcastToClients(message) {
+    for (const [clientId, client] of this.clients) {
+      if (client.socket && !client.socket.destroyed) {
+        client.socket.write(message + '\n');
+      }
+    }
+  }
+
+  async handleClient(socket) {
+    const clientId = `${socket.remoteAddress}:${socket.remotePort}-${Date.now()}`;
+    this.log('info', `Client connected: ${clientId}`);
+
+    if (!this.initialized) {
+      let waitCount = 0;
+      while (!this.initialized && waitCount < 20) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        waitCount++;
+      }
+      if (!this.initialized) {
+        socket.write('{"error":"MCP not ready"}\n');
+        socket.end();
+        return;
+      }
+    }
+
+    this.clients.set(clientId, {
+      socket,
+      pendingRequests: new Set(),
+      buffer: ''
+    });
+
+    socket.on('data', (data) => {
+      const client = this.clients.get(clientId);
+      if (!client) return;
+      client.buffer += data.toString();
+      const lines = client.buffer.split('\n');
+      client.buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (line.trim()) this.handleClientRequest(clientId, line);
+      }
+    });
+
+    socket.on('close', () => {
+      this.log('info', `Client disconnected: ${clientId}`);
+      this.clients.delete(clientId);
+    });
+
+    socket.on('error', (err) => {
+      this.log('error', `Client error: ${err.message}`);
+      this.clients.delete(clientId);
+    });
+  }
+
+  handleClientRequest(clientId, requestStr) {
+    try {
+      const request = JSON.parse(requestStr);
+      const client = this.clients.get(clientId);
+      if (!client) return;
+
+      if (request.method === 'initialize') {
+        client.socket.write(JSON.stringify({
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            protocolVersion: "2024-11-05",
+            serverInfo: { name: "claude-flow", version: "2.0.0-alpha.101" }
+          }
+        }) + '\n');
+        return;
+      }
+
+      if (request.id) {
+        client.pendingRequests.add(request.id);
+      }
+      this.mcpProcess.stdin.write(requestStr + '\n');
+      this.log('debug', `Forwarded: ${request.id}`);
+    } catch (err) {
+      this.log('error', `Invalid request: ${err.message}`);
+    }
+  }
+
+  async start() {
+    await this.startMCPProcess();
+    const server = net.createServer((socket) => this.handleClient(socket));
+    server.listen(TCP_PORT, '0.0.0.0', () => {
+      this.log('info', `Persistent MCP TCP server on port ${TCP_PORT}`);
+    });
+    server.on('error', (err) => {
+      this.log('error', `Server error: ${err.message}`);
+      if (err.code === 'EADDRINUSE') process.exit(1);
+    });
   }
 }
 
-// Auto-start if run directly
-if (require.main === module) {
-  const wrapper = new MCPServerWrapper();
-  wrapper.start();
-}
+const server = new PersistentMCPServer();
+server.start().catch(err => {
+  console.error('Failed to start:', err);
+  process.exit(1);
+});
 
-module.exports = MCPServerWrapper;
+process.on('SIGINT', () => {
+  if (server.mcpProcess) server.mcpProcess.kill();
+  process.exit(0);
+});

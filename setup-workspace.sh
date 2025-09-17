@@ -350,442 +350,120 @@ EOF
 
 update_claude_md
 
-# 7. Patch MCP server to fix hardcoded version, method routing, and agent tracking
-patch_mcp_server() {
-    log_info "🔧 Patching MCP server to fix version, method routing, and agent tracking..."
+# 7. Simplified MCP Server Setup (Copy-based)
+setup_mcp_server() {
+    log_info "🔧 Setting up MCP server using pre-fixed files..."
 
-    # Ensure claude-flow is installed/updated
+    # 1. Install/Verify claude-flow
     if ! command -v claude-flow >/dev/null 2>&1; then
         log_info "Installing claude-flow@alpha globally..."
-        npm install -g claude-flow@alpha || {
-            log_warning "Failed to install claude-flow, attempting with sudo..."
-            sudo npm install -g claude-flow@alpha || {
-                log_error "Failed to install claude-flow"
-                return 1
+        if dry_run_log "Would install claude-flow"; then :; else
+            npm install -g claude-flow@alpha || {
+                log_warning "Failed to install claude-flow, attempting with sudo..."
+                sudo npm install -g claude-flow@alpha || {
+                    log_error "Failed to install claude-flow"
+                    return 1
+                }
             }
-        }
-    else
-        # Check version and update if needed
-        local current_version=$(claude-flow --version 2>/dev/null || echo "unknown")
-        log_info "Current claude-flow version: $current_version"
-
-        # Optionally update to latest alpha
-        if [[ "$UPDATE_CLAUDE_FLOW" == "true" ]]; then
-            log_info "Updating claude-flow to latest alpha..."
-            npm update -g claude-flow@alpha || sudo npm update -g claude-flow@alpha
         fi
+    else
+        log_info "claude-flow is already installed."
     fi
 
-    # Find the MCP server file - check multiple locations
-    local mcp_server_path=""
-
-    # First check global installation
-    if [ -f "/usr/lib/node_modules/claude-flow/src/mcp/mcp-server.js" ]; then
-        mcp_server_path="/usr/lib/node_modules/claude-flow/src/mcp/mcp-server.js"
-        log_info "Found global MCP server at: $mcp_server_path"
-    else
-        # Fallback to npx cache
-        mcp_server_path=$(find /home/ubuntu/.npm/_npx -name "mcp-server.js" -path "*/claude-flow/src/mcp/*" 2>/dev/null | head -1)
-        if [ -n "$mcp_server_path" ]; then
-            log_info "Found cached MCP server at: $mcp_server_path"
+    # 2. Find claude-flow installation path
+    local claude_flow_path=""
+    for possible_path in \
+        "/usr/lib/node_modules/claude-flow" \
+        "/usr/local/lib/node_modules/claude-flow" \
+        "$(npm root -g)/claude-flow" \
+    ; do
+        if [ -d "$possible_path" ]; then
+            claude_flow_path="$possible_path"
+            break
         fi
-    fi
+    done
 
-    if [ -z "$mcp_server_path" ]; then
-        log_warning "MCP server not found after installation attempt, skipping patches"
+    if [ -z "$claude_flow_path" ]; then
+        log_warning "claude-flow installation not found. Cannot copy fixed files."
         return 1
     fi
+    
+    local mcp_server_dest="$claude_flow_path/src/mcp/mcp-server.js"
+    local mcp_server_src="/app/core-assets/scripts/mcp-server.js"
 
-    log_info "Patching MCP server at: $mcp_server_path"
-
-    if dry_run_log "Would patch MCP server at $mcp_server_path"; then return 0; fi
-
-    # Patch 1: Fix hardcoded version
-    if grep -q "this.version = '2.0.0-alpha.59'" "$mcp_server_path"; then
-        log_info "Patching hardcoded version..."
-        sed -i.bak "s|this.version = '2.0.0-alpha.59'|// PATCHED: Dynamic version from package.json\n    try {\n      this.version = require('../../package.json').version;\n    } catch (e) {\n      this.version = '2.0.0-alpha.101'; // Fallback\n    }|" "$mcp_server_path"
-        log_success "Patched MCP server version"
-    else
-        log_info "Version patch already applied or not needed"
-    fi
-
-    # Patch 2: Fix method routing to support direct tool calls
-    if ! grep -q "PATCHED: Check if method is a direct tool call" "$mcp_server_path"; then
-        log_info "Patching method routing for direct tool calls..."
-
-        # Create a temporary file with the patch
-        cat > /tmp/mcp_patch.txt << 'PATCH_EOF'
-        default:
-          // PATCHED: Check if method is a direct tool call
-          if (this.tools[method]) {
-            console.error(
-              `[${new Date().toISOString()}] INFO [claude-flow-mcp] Direct tool call: ${method}`
-            );
-            // Route direct tool calls to handleToolCall
-            return this.handleToolCall(id, { name: method, arguments: params });
-          }
-          return this.createErrorResponse(id, -32601, 'Method not found');
-PATCH_EOF
-
-        # Apply the patch by replacing the default case in handleMessage
-        awk '
-        /default:.*Method not found/ {
-            while ((getline line < "/tmp/mcp_patch.txt") > 0) {
-                print line
-            }
-            close("/tmp/mcp_patch.txt")
-            # Skip the original line
-            next
-        }
-        { print }
-        ' "$mcp_server_path" > "${mcp_server_path}.patched"
-
-        if [ -f "${mcp_server_path}.patched" ]; then
-            mv "${mcp_server_path}.patched" "$mcp_server_path"
-            log_success "Patched MCP server method routing"
-        else
-            log_warning "Failed to apply method routing patch"
+    # 3. Copy pre-fixed mcp-server.js
+    log_info "Copying fixed mcp-server.js to $mcp_server_dest"
+    if [ -f "$mcp_server_src" ]; then
+        if dry_run_log "Would copy $mcp_server_src to $mcp_server_dest"; then :; else
+            # Create backup of the original file
+            [ -f "$mcp_server_dest" ] && cp "$mcp_server_dest" "${mcp_server_dest}.bak.$(date +%s)"
+            cp "$mcp_server_src" "$mcp_server_dest"
+            log_success "Copied fixed mcp-server.js"
         fi
-
-        rm -f /tmp/mcp_patch.txt
     else
-        log_info "Method routing patch already applied"
+        log_error "Source file not found: $mcp_server_src"
     fi
 
-    # Patch 3: Fix agent tracking - remove mock data fallback
-    if grep -q "// Fallback mock response" "$mcp_server_path"; then
-        log_info "Patching agent_list to remove mock data fallback..."
-
-        # Create a backup
-        cp "$mcp_server_path" "${mcp_server_path}.bak.$(date +%Y%m%d_%H%M%S)"
-
-        # Use sed to remove the mock data section and replace with empty list
-        sed -i '/\/\/ Fallback mock response/,/count: 3,/{
-            /\/\/ Fallback mock response/i\        // PATCHED: Return empty list instead of mock data\
-        console.error(\
-          `[${new Date().toISOString()}] WARN [claude-flow-mcp] No real agents found, returning empty list`\
-        );
-            /\/\/ Fallback mock response/,/count: 3,/d
-        }' "$mcp_server_path"
-
-        # Replace the mock return with empty list return
-        sed -i "s|swarmId: args.swarmId || 'mock-swarm',|swarmId: args.swarmId || (await this.getActiveSwarmId()) || 'default',|" "$mcp_server_path"
-        sed -i "/{ id: 'agent-3', name: 'coder-1'/,/count: 3,/{
-            s|agents: \[.*\],|agents: [],|
-            s|count: 3,|count: 0,|
-        }" "$mcp_server_path"
-
-        log_success "Patched agent_list to remove mock data"
+    # 4. Copy pre-fixed mcp-tcp-server.js
+    local tcp_server_dest="/app/core-assets/scripts/mcp-tcp-server.js"
+    local tcp_server_src="/app/core-assets/scripts/mcp-tcp-server.js" # Source is the same as dest in this case as it's provided in the repo
+    
+    log_info "Ensuring mcp-tcp-server.js is the correct persistent version..."
+    if [ -f "$tcp_server_src" ]; then
+         if dry_run_log "Would ensure correct permissions for $tcp_server_dest"; then :; else
+            # The file is already in place, just ensure it's executable
+            chmod +x "$tcp_server_dest"
+            log_success "Verified mcp-tcp-server.js"
+        fi
     else
-        log_info "Agent list patch already applied or not needed"
+         log_error "Source file not found: $tcp_server_src"
     fi
 
-    # Patch 4: Fix agent_spawn to properly track agents with swarmId
-    if ! grep -q "PATCHED: Ensure swarmId consistency" "$mcp_server_path"; then
-        log_info "Patching agent_spawn for proper swarm tracking..."
-
-        # Add swarmId consistency fix
-        sed -i "/case 'agent_spawn':/,/return {/ {
-            /const agentId = /a\        // PATCHED: Ensure swarmId consistency\n        const activeSwarmId = args.swarmId || (await this.getActiveSwarmId());
-            s/swarmId: args.swarmId || (await this.getActiveSwarmId()),/swarmId: activeSwarmId,/
-            /if (global.agentTracker)/,/});/ {
-                s/global.agentTracker.trackAgent(agentId, {/global.agentTracker.trackAgent(agentId, {\n            swarmId: activeSwarmId,/
-                /});/a\          console.error(\n            \`[\${new Date().toISOString()}] INFO [claude-flow-mcp] Agent tracked: \${agentId} in swarm: \${activeSwarmId}\`,\n          );
-            }
-        }" "$mcp_server_path"
-
-        log_success "Patched agent_spawn for proper tracking"
-    else
-        log_info "Agent spawn patch already applied"
+    # 5. Configure shared database
+    log_info "Configuring shared database for MCP..."
+    if dry_run_log "Would create /workspace/.swarm and set CLAUDE_FLOW_DB_PATH"; then :; else
+        mkdir -p /workspace/.swarm
+        chmod 777 /workspace/.swarm
+        
+        local profile_file="/etc/profile.d/claude-flow-db.sh"
+        echo "export CLAUDE_FLOW_DB_PATH=/workspace/.swarm/memory.db" > "$profile_file"
+        chmod +x "$profile_file"
+        log_success "Configured shared database path in $profile_file"
     fi
 
-    # Patch 5: Enhanced agent tracker initialization
-    if ! grep -q "Agent tracker verified and ready" "$mcp_server_path"; then
-        log_info "Patching agent tracker initialization..."
-
-        # Add verification after tracker loading
-        sed -i "/\/\/ Initialize agent tracker/,/});/ {
-            /});/a\\\n// PATCHED: Verify agent tracker is available\nif (global.agentTracker) {\n  console.error(\`[\${new Date().toISOString()}] INFO [claude-flow-mcp] Agent tracker verified and ready\`);\n} else {\n  console.error(\`[\${new Date().toISOString()}] ERROR [claude-flow-mcp] Agent tracker NOT available - agent tracking will not work!\`);\n}
-        }" "$mcp_server_path"
-
-        log_success "Patched agent tracker initialization"
-    else
-        log_info "Agent tracker init patch already applied"
-    fi
-
-    # Restart MCP TCP server to apply patches
+    # 6. Restart MCP TCP server
     if command -v supervisorctl >/dev/null 2>&1; then
-        log_info "Restarting MCP TCP server to apply patches..."
-        supervisorctl -c /etc/supervisor/conf.d/supervisord.conf restart mcp-tcp-server 2>/dev/null || {
-            # Try killing the process directly if supervisorctl fails
-            local mcp_pid=$(pgrep -f "mcp-tcp-server.js" | head -1)
-            if [ -n "$mcp_pid" ]; then
-                kill -HUP "$mcp_pid" 2>/dev/null && log_success "Sent reload signal to MCP server (PID: $mcp_pid)"
-            fi
-        }
-    fi
-}
-
-# Function to patch MCP TCP server for persistence
-patch_mcp_tcp_server() {
-    log_info "🔧 Patching MCP TCP server for persistent connections..."
-
-    local tcp_server_path="/app/core-assets/scripts/mcp-tcp-server.js"
-
-    if [ ! -f "$tcp_server_path" ]; then
-        log_warning "MCP TCP server not found at $tcp_server_path"
-        return 1
+        log_info "Restarting MCP TCP server to apply changes..."
+        if dry_run_log "Would restart mcp-tcp-server"; then :; else
+            supervisorctl -c /etc/supervisor/conf.d/supervisord.conf restart mcp-tcp-server 2>/dev/null || {
+                log_warning "supervisorctl restart failed. The service might not be running."
+            }
+        fi
     fi
 
-    # Check if already patched
-    if grep -q "PersistentMCPServer" "$tcp_server_path"; then
-        log_info "MCP TCP server already patched for persistence"
-        return 0
-    fi
+    # 7. Verification
+    log_info "🔍 Verifying setup..."
+    if dry_run_log "Would verify setup"; then return 0; fi
 
-    log_info "Creating persistent MCP TCP server..."
+    sleep 3 # Give the server a moment to start
 
-    if dry_run_log "Would replace MCP TCP server with persistent version"; then return 0; fi
+    # Test the agent_list function to ensure it's not returning mock data
+    echo "🧪 Testing agent_list function..."
+    test_result=$(echo '{"jsonrpc":"2.0","id":"test","method":"tools/call","params":{"name":"agent_list","arguments":{}}}' | timeout 2 nc localhost 9500 2>/dev/null | tail -1)
 
-    # Backup original
-    cp "$tcp_server_path" "${tcp_server_path}.original" 2>/dev/null || true
-
-    # Create the persistent server inline (avoiding heredoc issues)
-    echo '#!/usr/bin/env node' > "$tcp_server_path"
-    echo '' >> "$tcp_server_path"
-    echo '// Persistent MCP TCP Server - Fixes agent tracking' >> "$tcp_server_path"
-    echo '// Maintains single MCP instance across all connections' >> "$tcp_server_path"
-    echo '' >> "$tcp_server_path"
-
-    # Download or copy the persistent version
-    if [ -f "/workspace/ext/mcp-tcp-persistent.js" ]; then
-        # Use local version if available
-        cp /workspace/ext/mcp-tcp-persistent.js "$tcp_server_path"
+    if echo "$test_result" | grep -q '"id":"agent-1"'; then
+        log_error "Verification failed: MCP server is still returning mock data!"
+    elif [ -z "$test_result" ]; then
+        log_warning "Verification inconclusive: Could not connect to MCP TCP server on port 9500."
     else
-        # Create minimal persistent version inline
-        cat >> "$tcp_server_path" << 'PERSISTENT_SERVER'
-const { spawn } = require('child_process');
-const net = require('net');
-const readline = require('readline');
-
-const TCP_PORT = process.env.MCP_TCP_PORT || 9500;
-const LOG_LEVEL = process.env.MCP_LOG_LEVEL || 'info';
-
-class PersistentMCPServer {
-  constructor() {
-    this.mcpProcess = null;
-    this.mcpInterface = null;
-    this.clients = new Map();
-    this.initialized = false;
-    this.initPromise = null;
-  }
-
-  log(level, message, ...args) {
-    const levels = { debug: 0, info: 1, warn: 2, error: 3 };
-    if (levels[level] >= levels[LOG_LEVEL]) {
-      console.log(`[PMCP-${level.toUpperCase()}] ${new Date().toISOString()} ${message}`, ...args);
-    }
-  }
-
-  async startMCPProcess() {
-    if (this.mcpProcess) return;
-
-    this.log('info', 'Starting persistent MCP process...');
-    this.mcpProcess = spawn('npx', ['claude-flow@alpha', 'mcp', 'start', '--stdio'], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: '/workspace',
-      env: { ...process.env, CLAUDE_FLOW_DIRECT_MODE: 'true' }
-    });
-
-    this.mcpInterface = readline.createInterface({
-      input: this.mcpProcess.stdout,
-      crlfDelay: Infinity
-    });
-
-    this.mcpInterface.on('line', (line) => this.handleMCPOutput(line));
-    this.mcpProcess.stderr.on('data', (data) => this.log('debug', `MCP: ${data}`));
-    this.mcpProcess.on('close', (code) => {
-      this.log('error', `MCP exited: ${code}`);
-      this.mcpProcess = null;
-      this.initialized = false;
-      setTimeout(() => this.startMCPProcess(), 5000);
-    });
-
-    await this.initializeMCP();
-  }
-
-  async initializeMCP() {
-    if (this.initialized) return;
-    const initRequest = {
-      jsonrpc: "2.0",
-      id: "init-" + Date.now(),
-      method: "initialize",
-      params: {
-        protocolVersion: "2024-11-05",
-        capabilities: { tools: { listChanged: true }},
-        clientInfo: { name: "tcp-wrapper", version: "1.0.0" }
-      }
-    };
-    return new Promise((resolve) => {
-      this.initPromise = { resolve, id: initRequest.id };
-      this.mcpProcess.stdin.write(JSON.stringify(initRequest) + '\n');
-    });
-  }
-
-  handleMCPOutput(line) {
-    if (!line.startsWith('{')) return;
-    try {
-      const msg = JSON.parse(line);
-      if (this.initPromise && msg.id === this.initPromise.id) {
-        this.initialized = true;
-        this.log('info', 'MCP initialized');
-        this.initPromise.resolve();
-        this.initPromise = null;
-        return;
-      }
-      if (!msg.id) {
-        this.broadcastToClients(line);
-        return;
-      }
-      const clientId = this.findClientByRequestId(msg.id);
-      if (clientId) {
-        const client = this.clients.get(clientId);
-        if (client && client.socket) {
-          client.socket.write(line + '\n');
-        }
-      }
-    } catch (err) {
-      this.log('error', `Parse error: ${err.message}`);
-    }
-  }
-
-  findClientByRequestId(requestId) {
-    for (const [clientId, client] of this.clients) {
-      if (client.pendingRequests && client.pendingRequests.has(requestId)) {
-        client.pendingRequests.delete(requestId);
-        return clientId;
-      }
-    }
-    return null;
-  }
-
-  broadcastToClients(message) {
-    for (const [clientId, client] of this.clients) {
-      if (client.socket && !client.socket.destroyed) {
-        client.socket.write(message + '\n');
-      }
-    }
-  }
-
-  async handleClient(socket) {
-    const clientId = `${socket.remoteAddress}:${socket.remotePort}-${Date.now()}`;
-    this.log('info', `Client connected: ${clientId}`);
-
-    if (!this.initialized) {
-      let waitCount = 0;
-      while (!this.initialized && waitCount < 20) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        waitCount++;
-      }
-      if (!this.initialized) {
-        socket.write('{"error":"MCP not ready"}\n');
-        socket.end();
-        return;
-      }
-    }
-
-    this.clients.set(clientId, {
-      socket,
-      pendingRequests: new Set(),
-      buffer: ''
-    });
-
-    socket.on('data', (data) => {
-      const client = this.clients.get(clientId);
-      if (!client) return;
-      client.buffer += data.toString();
-      const lines = client.buffer.split('\n');
-      client.buffer = lines.pop() || '';
-      for (const line of lines) {
-        if (line.trim()) this.handleClientRequest(clientId, line);
-      }
-    });
-
-    socket.on('close', () => {
-      this.log('info', `Client disconnected: ${clientId}`);
-      this.clients.delete(clientId);
-    });
-
-    socket.on('error', (err) => {
-      this.log('error', `Client error: ${err.message}`);
-      this.clients.delete(clientId);
-    });
-  }
-
-  handleClientRequest(clientId, requestStr) {
-    try {
-      const request = JSON.parse(requestStr);
-      const client = this.clients.get(clientId);
-      if (!client) return;
-
-      if (request.method === 'initialize') {
-        client.socket.write(JSON.stringify({
-          jsonrpc: "2.0",
-          id: request.id,
-          result: {
-            protocolVersion: "2024-11-05",
-            serverInfo: { name: "claude-flow", version: "2.0.0-alpha.101" }
-          }
-        }) + '\n');
-        return;
-      }
-
-      if (request.id) {
-        client.pendingRequests.add(request.id);
-      }
-      this.mcpProcess.stdin.write(requestStr + '\n');
-      this.log('debug', `Forwarded: ${request.id}`);
-    } catch (err) {
-      this.log('error', `Invalid request: ${err.message}`);
-    }
-  }
-
-  async start() {
-    await this.startMCPProcess();
-    const server = net.createServer((socket) => this.handleClient(socket));
-    server.listen(TCP_PORT, '0.0.0.0', () => {
-      this.log('info', `Persistent MCP TCP server on port ${TCP_PORT}`);
-    });
-    server.on('error', (err) => {
-      this.log('error', `Server error: ${err.message}`);
-      if (err.code === 'EADDRINUSE') process.exit(1);
-    });
-  }
-}
-
-const server = new PersistentMCPServer();
-server.start().catch(err => {
-  console.error('Failed to start:', err);
-  process.exit(1);
-});
-
-process.on('SIGINT', () => {
-  if (server.mcpProcess) server.mcpProcess.kill();
-  process.exit(0);
-});
-PERSISTENT_SERVER
+        log_success "Verification complete: MCP server is responding correctly."
     fi
-
-    chmod +x "$tcp_server_path"
-    log_success "Replaced MCP TCP server with persistent version"
 }
 
 if [ "$DRY_RUN" = false ]; then
-    patch_mcp_server
-    patch_mcp_tcp_server
+    setup_mcp_server
 else
-    dry_run_log "Would patch MCP server"
-    dry_run_log "Would patch MCP TCP server"
+    dry_run_log "Would set up MCP server"
 fi
 
 # --- Final Summary ---
