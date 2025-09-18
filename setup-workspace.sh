@@ -713,62 +713,8 @@ verify_agent_tracking() {
     fi
 }
 
-# 9. Create Rust backend patch file for Docker build
-create_rust_patches() {
-    log_info "📝 Creating consolidated Rust backend patches for Docker build..."
-    
-    # Create patches directory
-    mkdir -p /workspace/ext/patches
-    
-    # Create consolidated fix that merges the two systems
-    cat > /workspace/ext/patches/consolidated_agent_graph_fix.patch << 'PATCH_EOF'
---- a/src/actors/claude_flow_actor_tcp.rs
-+++ b/src/actors/claude_flow_actor_tcp.rs
-@@ -738,6 +738,11 @@
-     }
-     
-     fn poll_agent_statuses(&mut self, _ctx: &mut Context<Self>) {
-+        // DISABLED: ClaudeFlowActor TCP polling is broken due to persistent connection issues
-+        // The MCP server closes connections after each request, but this actor expects persistent connections
-+        // BotsClient handles agent fetching correctly with fresh connections
-+        return;
-+        
-         debug!("Polling agent statuses via TCP (100ms cycle) - {} consecutive failures", 
-                self.consecutive_poll_failures);
-         
---- a/src/services/bots_client.rs
-+++ b/src/services/bots_client.rs
-@@ -225,7 +225,18 @@
-                                                             }
-                                                             let mut lock = updates.write().await;
-                                                             *lock = Some(update);
--                                                            continue; // Skip the rest of the parsing
-+                                                            
-+                                                            // CRITICAL FIX: Send agents to graph
-+                                                            if let Some(graph_addr) = graph_service_addr {
-+                                                                info!("📨 BotsClient sending {} agents to graph", update.agents.len());
-+                                                                graph_addr.do_send(UpdateBotsGraph {
-+                                                                    agents: update.agents.clone()
-+                                                                        .into_iter()
-+                                                                        .map(|a| a.into())
-+                                                                        .collect()
-+                                                                });
-+                                                            }
-+                                                            continue;
-                                                         }
-                                                     }
-                                                 }
-PATCH_EOF
-    
-    log_success "Created consolidated Rust backend patch at /workspace/ext/patches/consolidated_agent_graph_fix.patch"
-    log_info "This patch:"
-    log_info "  1. Disables broken ClaudeFlowActor TCP polling"
-    log_info "  2. Makes BotsClient send graph updates"
-    log_info "  3. Creates single clean data flow path"
-    log_info ""
-    log_info "Apply in visionflow_container Docker build with:"
-    log_info "  cd /app && patch -p1 < /workspace/ext/patches/consolidated_agent_graph_fix.patch"
-}
+# Removed: Patch creation was inappropriate for a setup script
+# This should be handled as part of the actual project development, not environment setup
 
 # --- Main Execution ---
 show_setup_summary
@@ -776,12 +722,9 @@ show_setup_summary
 # Run verification if not in dry-run mode
 if [ "$DRY_RUN" = false ]; then
     verify_agent_tracking
-    create_rust_patches
 fi
 
 echo ""
 echo "🎉 Multi-Agent environment ready for development!"
 echo "🔧 Agent tracking fixed - using shared database at /workspace/.swarm/memory.db"
-echo "🚀 CRITICAL: Apply Rust patch in visionflow_container for graph visualization!"
-echo "   Run: cd /app && patch -p1 < /workspace/ext/patches/fix_agent_graph_update.patch"
 echo ""
