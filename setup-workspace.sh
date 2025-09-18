@@ -80,6 +80,15 @@ else
     log_info "Directory /home/ubuntu already exists, skipping symlink."
 fi
 
+# Ensure claude is accessible globally
+if [ -f "/home/ubuntu/.local/bin/claude" ] && [ ! -f "/usr/local/bin/claude" ]; then
+    if dry_run_log "Would create global claude symlink"; then :; else
+        ln -sf /home/ubuntu/.local/bin/claude /usr/local/bin/claude
+        chmod +x /usr/local/bin/claude 2>/dev/null || true
+        log_success "Created global claude symlink"
+    fi
+fi
+
 # --- Helper Functions for File Operations ---
 copy_if_missing() {
     local src="$1"
@@ -457,75 +466,106 @@ PATCH_EOF
         # Create backup
         cp "$mcp_server_path" "${mcp_server_path}.bak.$(date +%s)"
         
-        # Replace the mock fallback with proper database query
-        sed -i '/\/\/ Fallback mock response/,/timestamp: new Date().toISOString(),$/c\
-        // PATCHED: Query database directly for agents\
-        try {\
-          const swarmId = args.swarmId || await this.getActiveSwarmId();\
-          if (!swarmId) {\
-            // No swarm specified, list all agents from database\
-            const allEntries = await this.memoryStore.list();  // No namespace needed\
-            const agents = allEntries.filter(entry => entry.key.startsWith("agent:")).map(entry => {\
-              try {\
-                const data = typeof entry.value === "string" ? JSON.parse(entry.value) : entry.value;\
-                return {\
-                  id: data.id || entry.key.split(":").pop(),\
-                  name: data.name || "unknown",\
-                  type: data.type || "agent",\
-                  status: data.status || "unknown",\
-                  capabilities: data.capabilities || [],\
-                  swarmId: entry.key.split(":")[1] || "unknown"\
-                };\
-              } catch (e) {\
-                return null;\
-              }\
-            }).filter(Boolean);\
-            \
-            return {\
-              success: true,\
-              swarmId: "all",\
-              agents: agents,\
-              count: agents.length,\
-              timestamp: new Date().toISOString(),\
-            };\
-          }\
-          \
-          // Query agents for specific swarm\
-          const prefix = `agent:${swarmId}:`;\
-          const entries = await this.memoryStore.list();  // No namespace needed\
-          const swarmAgents = entries.filter(entry => entry.key.startsWith(prefix)).map(entry => {\
-            try {\
-              const data = typeof entry.value === "string" ? JSON.parse(entry.value) : entry.value;\
-              return {\
-                id: data.id || entry.key.split(":").pop(),\
-                name: data.name || "unknown",\
-                type: data.type || "agent",\
-                status: data.status || "active",\
-                capabilities: data.capabilities || []\
-              };\
-            } catch (e) {\
-              return null;\
-            }\
-          }).filter(Boolean);\
-          \
-          return {\
-            success: true,\
-            swarmId: swarmId,\
-            agents: swarmAgents,\
-            count: swarmAgents.length,\
-            timestamp: new Date().toISOString(),\
-          };\
-        } catch (error) {\
-          console.error("Failed to query agents:", error);\
-          return {\
-            success: false,\
-            error: error.message,\
-            agents: [],\
-            timestamp: new Date().toISOString(),\
-          };\
-        }' "$mcp_server_path"
+        # Use a more robust patching method that preserves the switch statement structure
+        log_info "Creating agent_list patch file..."
         
-        log_success "Patched agent_list to use real database queries"
+        # Create a temporary patch file
+        cat > /tmp/agent_list_patch.js << 'AGENT_PATCH_EOF'
+        // PATCHED: Query database directly for agents
+        try {
+          const swarmId = args.swarmId || await this.getActiveSwarmId();
+          if (!swarmId) {
+            // No swarm specified, list all agents from database
+            const allEntries = await this.memoryStore.list();  // No namespace needed
+            const agents = allEntries.filter(entry => entry.key.startsWith("agent:")).map(entry => {
+              try {
+                const data = typeof entry.value === "string" ? JSON.parse(entry.value) : entry.value;
+                return {
+                  id: data.id || entry.key.split(":").pop(),
+                  name: data.name || "unknown",
+                  type: data.type || "agent",
+                  status: data.status || "unknown",
+                  capabilities: data.capabilities || [],
+                  swarmId: entry.key.split(":")[1] || "unknown"
+                };
+              } catch (e) {
+                return null;
+              }
+            }).filter(Boolean);
+            
+            return {
+              success: true,
+              swarmId: "all",
+              agents: agents,
+              count: agents.length,
+              timestamp: new Date().toISOString(),
+            };
+          }
+          
+          // Query agents for specific swarm
+          const prefix = `agent:${swarmId}:`;
+          const entries = await this.memoryStore.list();  // No namespace needed
+          const swarmAgents = entries.filter(entry => entry.key.startsWith(prefix)).map(entry => {
+            try {
+              const data = typeof entry.value === "string" ? JSON.parse(entry.value) : entry.value;
+              return {
+                id: data.id || entry.key.split(":").pop(),
+                name: data.name || "unknown",
+                type: data.type || "agent",
+                status: data.status || "active",
+                capabilities: data.capabilities || []
+              };
+            } catch (e) {
+              return null;
+            }
+          }).filter(Boolean);
+          
+          return {
+            success: true,
+            swarmId: swarmId,
+            agents: swarmAgents,
+            count: swarmAgents.length,
+            timestamp: new Date().toISOString(),
+          };
+        } catch (error) {
+          console.error("Failed to query agents:", error);
+          return {
+            success: false,
+            error: error.message,
+            agents: [],
+            timestamp: new Date().toISOString(),
+          };
+        }
+AGENT_PATCH_EOF
+        
+        # Use awk to replace the mock response section while preserving case statement structure
+        awk '
+        BEGIN { in_mock = 0; skip = 0 }
+        /\/\/ Fallback mock response/ { in_mock = 1; skip = 1; next }
+        in_mock && /timestamp: new Date\(\)\.toISOString\(\),/ { 
+            skip = 1
+            # Read and insert the patch content
+            while ((getline line < "/tmp/agent_list_patch.js") > 0) {
+                print "        " line
+            }
+            close("/tmp/agent_list_patch.js")
+            in_mock = 0
+            next
+        }
+        in_mock { skip = 1; next }
+        !skip { print }
+        { skip = 0 }
+        ' "$mcp_server_path" > "${mcp_server_path}.patched"
+        
+        if [ -f "${mcp_server_path}.patched" ] && [ -s "${mcp_server_path}.patched" ]; then
+            mv "${mcp_server_path}.patched" "$mcp_server_path"
+            log_success "Patched agent_list to use real database queries"
+        else
+            log_error "Failed to patch agent_list - patch file empty or missing"
+            [ -f "${mcp_server_path}.patched" ] && rm -f "${mcp_server_path}.patched"
+        fi
+        
+        rm -f /tmp/agent_list_patch.js
     else
         log_info "Agent tracking patch already applied or not needed"
     fi

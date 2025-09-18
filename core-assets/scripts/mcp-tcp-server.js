@@ -2,13 +2,16 @@
 
 // Persistent MCP TCP Server - Fixes agent tracking
 // Maintains single MCP instance across all connections
+// Enhanced with authentication and security
 
 const { spawn } = require('child_process');
 const net = require('net');
 const readline = require('readline');
+const AuthMiddleware = require('./auth-middleware');
 
 const TCP_PORT = process.env.MCP_TCP_PORT || 9500;
 const LOG_LEVEL = process.env.MCP_LOG_LEVEL || 'info';
+const MAX_CONNECTIONS = parseInt(process.env.TCP_MAX_CONNECTIONS || '50');
 
 class PersistentMCPServer {
   constructor() {
@@ -17,6 +20,7 @@ class PersistentMCPServer {
     this.clients = new Map();
     this.initialized = false;
     this.initPromise = null;
+    this.auth = new AuthMiddleware();
   }
 
   log(level, message, ...args) {
@@ -119,7 +123,35 @@ class PersistentMCPServer {
 
   async handleClient(socket) {
     const clientId = `${socket.remoteAddress}:${socket.remotePort}-${Date.now()}`;
+    const clientIp = socket.remoteAddress;
+    
+    // Check if IP is blocked
+    if (this.auth.isIPBlocked(clientIp)) {
+        this.auth.logSecurityEvent('tcp_blocked_connection', { ip: clientIp });
+        socket.write(JSON.stringify({ error: 'Forbidden' }) + '\n');
+        socket.end();
+        return;
+    }
+    
+    // Check connection limit
+    if (this.clients.size >= MAX_CONNECTIONS) {
+        this.auth.logSecurityEvent('tcp_connection_limit', { ip: clientIp });
+        socket.write(JSON.stringify({ error: 'Service unavailable - connection limit reached' }) + '\n');
+        socket.end();
+        return;
+    }
+    
+    // Check rate limiting
+    if (!this.auth.checkRateLimit(clientIp)) {
+        this.auth.logSecurityEvent('tcp_rate_limit_exceeded', { ip: clientIp });
+        this.auth.blockIP(clientIp, 300000); // Block for 5 minutes
+        socket.write(JSON.stringify({ error: 'Rate limit exceeded' }) + '\n');
+        socket.end();
+        return;
+    }
+    
     this.log('info', `Client connected: ${clientId}`);
+    this.auth.logSecurityEvent('tcp_connection_established', { clientId, ip: clientIp });
 
     if (!this.initialized) {
       let waitCount = 0;
@@ -137,7 +169,10 @@ class PersistentMCPServer {
     this.clients.set(clientId, {
       socket,
       pendingRequests: new Set(),
-      buffer: ''
+      buffer: '',
+      authenticated: false,
+      ip: clientIp,
+      connectionTime: Date.now()
     });
 
     socket.on('data', (data) => {
@@ -147,17 +182,52 @@ class PersistentMCPServer {
       const lines = client.buffer.split('\n');
       client.buffer = lines.pop() || '';
       for (const line of lines) {
-        if (line.trim()) this.handleClientRequest(clientId, line);
+        if (line.trim()) {
+          // Validate input before processing
+          const validation = this.auth.validateInput(line);
+          if (!validation.valid) {
+            this.log('error', `Invalid input from ${clientId}: ${validation.error}`);
+            this.auth.logSecurityEvent('tcp_invalid_input', { clientId, error: validation.error });
+            socket.write(JSON.stringify({
+              jsonrpc: '2.0',
+              error: {
+                code: -32600,
+                message: 'Invalid request: ' + validation.error
+              }
+            }) + '\n');
+            continue;
+          }
+          
+          // Rate limit check for individual messages
+          if (!this.auth.checkRateLimit(clientIp)) {
+            socket.write(JSON.stringify({
+              jsonrpc: '2.0',
+              error: {
+                code: -32000,
+                message: 'Rate limit exceeded'
+              }
+            }) + '\n');
+            continue;
+          }
+          
+          const sanitizedInput = typeof validation.sanitized === 'string'
+            ? validation.sanitized
+            : JSON.stringify(validation.sanitized);
+          
+          this.handleClientRequest(clientId, sanitizedInput);
+        }
       }
     });
 
     socket.on('close', () => {
       this.log('info', `Client disconnected: ${clientId}`);
+      this.auth.logSecurityEvent('tcp_connection_closed', { clientId, ip: clientIp });
       this.clients.delete(clientId);
     });
 
     socket.on('error', (err) => {
       this.log('error', `Client error: ${err.message}`);
+      this.auth.logSecurityEvent('tcp_client_error', { clientId, error: err.message });
       this.clients.delete(clientId);
     });
   }
@@ -167,6 +237,45 @@ class PersistentMCPServer {
       const request = JSON.parse(requestStr);
       const client = this.clients.get(clientId);
       if (!client) return;
+      
+      // Handle authentication
+      if (this.auth.config.authEnabled && !client.authenticated) {
+        if (request.method === 'authenticate') {
+          if (this.auth.validateToken(request.params?.token)) {
+            client.authenticated = true;
+            client.socket.write(JSON.stringify({
+              jsonrpc: '2.0',
+              id: request.id,
+              result: { authenticated: true }
+            }) + '\n');
+            this.auth.logSecurityEvent('tcp_auth_success', { clientId });
+            return;
+          } else {
+            client.socket.write(JSON.stringify({
+              jsonrpc: '2.0',
+              id: request.id,
+              error: {
+                code: -32000,
+                message: 'Authentication failed'
+              }
+            }) + '\n');
+            this.auth.logSecurityEvent('tcp_auth_failed', { clientId });
+            client.socket.end();
+            return;
+          }
+        } else if (request.method !== 'initialize') {
+          // Require authentication for all methods except initialize
+          client.socket.write(JSON.stringify({
+            jsonrpc: '2.0',
+            id: request.id,
+            error: {
+              code: -32000,
+              message: 'Authentication required'
+            }
+          }) + '\n');
+          return;
+        }
+      }
 
       if (request.method === 'initialize') {
         client.socket.write(JSON.stringify({
@@ -192,9 +301,27 @@ class PersistentMCPServer {
 
   async start() {
     await this.startMCPProcess();
+    
+    // Start connection cleanup interval
+    setInterval(() => {
+      const now = Date.now();
+      const timeout = parseInt(process.env.TCP_CONNECTION_TIMEOUT || '300000');
+      
+      for (const [clientId, client] of this.clients.entries()) {
+        if (now - client.connectionTime > timeout) {
+          this.log('info', `Closing idle TCP connection: ${clientId}`);
+          this.auth.logSecurityEvent('tcp_connection_timeout', { clientId });
+          client.socket.end();
+          this.clients.delete(clientId);
+        }
+      }
+    }, 30000); // Check every 30 seconds
+    
     const server = net.createServer((socket) => this.handleClient(socket));
     server.listen(TCP_PORT, '0.0.0.0', () => {
       this.log('info', `Persistent MCP TCP server on port ${TCP_PORT}`);
+      this.log('info', `Authentication: ${this.auth.config.authEnabled ? 'enabled' : 'disabled'}`);
+      this.log('info', `Max connections: ${MAX_CONNECTIONS}`);
     });
     server.on('error', (err) => {
       this.log('error', `Server error: ${err.message}`);

@@ -13,6 +13,7 @@ This project provides a sophisticated, multi-container Docker environment design
 - **Dual-Container Architecture**: Separates core AI logic and CLI tools from resource-intensive GUI applications.
 - **Rich Development Environment**: A polyglot environment with runtimes for Python, Node.js, Rust, and Deno, equipped with extensive tooling for AI/ML, 3D graphics, EDA, document processing, and network analysis.
 - **Flexible MCP Connectivity**: Supports both WebSocket (port 3002) and high-performance TCP (port 9500) for MCP communication.
+- **Enterprise-Grade Security**: Comprehensive security features including authentication, rate limiting, SSL/TLS encryption, CORS protection, and audit logging.
 - **Comprehensive AI Tooling**: Includes a full suite of AI/ML libraries (PyTorch, TensorFlow), GPU acceleration with the CUDA Toolkit, and CLIs for major AI models (Gemini, OpenAI Codex, Anthropic Claude).
 - **Advanced Hardware Acceleration**: Supports GPU-accelerated computing with CUDA and AI inference with the WasmEdge runtime and its OpenVINO backend.
 - **MCP-based Orchestration**: Utilises the Model Context Protocol for seamless interaction between AI agents and a wide array of specialised tools.
@@ -377,6 +378,109 @@ graph TD
     style TCP_Server fill:#afa,stroke:#333,stroke-width:2px
     style VNC_Access fill:#afa,stroke:#333,stroke-width:2px
 ```
+
+## 🔒 Security Features
+
+The Multi-Agent Docker Environment includes comprehensive enterprise-grade security features to protect against common threats and ensure secure operation in production environments.
+
+### 🛡️ Authentication & Authorization
+
+- **Token-based Authentication**: Secure authentication for both WebSocket and TCP connections
+- **JWT Support**: Industry-standard JSON Web Tokens for session management
+- **Configurable Security**: Enable/disable security features based on deployment needs
+
+### 🚦 Rate Limiting & DDoS Protection
+
+- **Per-client Rate Limiting**: Prevents abuse with configurable request limits
+- **Automatic IP Blocking**: Blocks malicious IPs after failed attempts
+- **Connection Limits**: Controls maximum concurrent connections
+- **Circuit Breaker Pattern**: Prevents cascade failures
+
+### 🔍 Input Validation & Sanitization
+
+- **Message Validation**: Validates all JSON-RPC messages
+- **Size Limits**: Prevents memory exhaustion attacks
+- **Content Sanitization**: Filters malicious content and prevents injection attacks
+- **Protocol Validation**: Ensures proper MCP protocol compliance
+
+### 🌐 Network Security
+
+- **CORS Protection**: Configurable Cross-Origin Resource Sharing policies
+- **SSL/TLS Support**: Full encryption support for production deployments
+- **Security Headers**: Implements security headers for web-based connections
+- **Firewall-ready**: Designed to work with standard firewall configurations
+
+### 📊 Monitoring & Auditing
+
+- **Security Event Logging**: Comprehensive audit trails for all security events
+- **Health Check Endpoints**: Real-time service health monitoring
+- **Performance Monitoring**: Resource usage and connection monitoring
+- **Alert Integration**: Ready for integration with monitoring systems
+
+### ⚙️ Security Configuration
+
+Copy the example environment file and customize security settings:
+
+```bash
+# Copy example configuration
+cp .env.example .env
+
+# Edit security settings
+nano .env
+```
+
+**Important Security Settings:**
+
+```bash
+# Authentication (CHANGE THESE!)
+WS_AUTH_TOKEN=your-secure-websocket-token
+TCP_AUTH_TOKEN=your-secure-tcp-token
+JWT_SECRET=your-super-secret-jwt-key-minimum-32-chars
+
+# Rate Limiting
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_MAX_REQUESTS=100
+RATE_LIMIT_WINDOW_MS=60000
+
+# Connection Limits
+WS_MAX_CONNECTIONS=100
+TCP_MAX_CONNECTIONS=50
+
+# SSL/TLS (for production)
+SSL_ENABLED=false
+SSL_CERT_PATH=/app/certs/server.crt
+SSL_KEY_PATH=/app/certs/server.key
+```
+
+### 🔧 Security Testing
+
+Validate your security configuration with the included test script:
+
+```bash
+# Run comprehensive security validation
+./scripts/validate-security.sh
+
+# Test secure client connections
+docker exec multi-agent-container node /app/core-assets/scripts/secure-client-example.js ws
+docker exec multi-agent-container node /app/core-assets/scripts/secure-client-example.js tcp
+```
+
+### 📖 Security Documentation
+
+For detailed security information, see:
+- [SECURITY.md](SECURITY.md) - Comprehensive security guide
+- [.env.example](.env.example) - Complete configuration reference
+
+### 🚨 Security Best Practices
+
+1. **Change Default Credentials**: Always update default tokens before deployment
+2. **Enable SSL/TLS**: Use encryption for production deployments
+3. **Regular Updates**: Keep dependencies and security patches current
+4. **Monitor Logs**: Implement log monitoring and alerting
+5. **Network Isolation**: Use firewalls and network segmentation
+6. **Backup & Recovery**: Implement regular backups with encryption
+
+**⚠️ Security Warning**: The default configuration includes development-friendly settings. Always review and harden security settings before production deployment.
 
 ## 📜 License
 

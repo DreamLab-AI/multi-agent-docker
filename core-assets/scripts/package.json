@@ -1,8 +1,20 @@
 {
-  "name": "mcp-client-scripts",
+  "name": "mcp-secure-scripts",
   "version": "1.0.0",
-  "description": "Dependencies for MCP Node.js client scripts",
+  "description": "Secure MCP server scripts with authentication and rate limiting",
   "dependencies": {
-    "ws": "latest"
+    "ws": "^8.13.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "tcp-server": "node mcp-tcp-server.js",
+    "ws-server": "node mcp-ws-relay.js",
+    "test-client": "node secure-client-example.js",
+    "migrate-env": "node /workspace/ext/scripts/migrate-env.js"
+  },
+  "keywords": ["mcp", "security", "websocket", "tcp", "authentication", "rate-limiting"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
   }
 }

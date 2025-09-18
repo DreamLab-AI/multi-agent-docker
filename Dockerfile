@@ -140,6 +140,13 @@ COPY setup-workspace.sh /app/setup-workspace.sh
 COPY mcp-helper.sh /app/mcp-helper.sh
 RUN chmod +x /app/setup-workspace.sh && chmod +x /app/mcp-helper.sh
 
+# Copy security-enhanced scripts
+COPY core-assets/scripts/auth-middleware.js /app/core-assets/scripts/
+COPY core-assets/scripts/secure-client-example.js /app/core-assets/scripts/
+COPY core-assets/scripts/mcp-tcp-server.js /app/core-assets/scripts/
+COPY core-assets/scripts/mcp-ws-relay.js /app/core-assets/scripts/
+RUN chmod +x /app/core-assets/scripts/*.js
+
 # Log directory is now created during user setup
 
 # 9. Install Node.js packages
@@ -158,8 +165,19 @@ RUN npm cache clean --force && \
 
 # Install claude via install script as dev user
 USER dev
-RUN curl -fsSL https://claude.ai/install.sh | bash -s 1.0.42
+WORKDIR /home/dev
+# Set HOME explicitly to avoid confusion with ubuntu symlink
+ENV HOME=/home/dev
+RUN curl -fsSL https://claude.ai/install.sh | bash -s 1.0.42 || true
+# The installer might install to /home/ubuntu due to symlink detection
+# Create symlinks to handle both cases
 USER root
+RUN if [ -f /home/ubuntu/.local/bin/claude ]; then \
+        ln -sf /home/ubuntu/.local/bin/claude /usr/local/bin/claude; \
+    elif [ -f /home/dev/.local/bin/claude ]; then \
+        ln -sf /home/dev/.local/bin/claude /usr/local/bin/claude; \
+    fi && \
+    chmod +x /usr/local/bin/claude 2>/dev/null || true
 
 # Grant dev user permissions to update global npm packages
 RUN chown -R dev:dev "$(npm config get prefix)/lib/node_modules" && \
@@ -238,11 +256,13 @@ RUN git config --global user.email "agent@multi-agent-docker.com" && \
 # Grant sudo access to the dev user
 USER root
 RUN echo "dev ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-USER dev
 
 # --- Shell Configuration ---
-# Set up the bash environment for the dev user
-RUN echo '\n\
+# Set up the bash environment for the dev user while still root
+# Create the .bashrc file with proper permissions
+RUN touch /home/dev/.bashrc && \
+    chown dev:dev /home/dev/.bashrc && \
+    echo '\n\
 # --- Custom Environment Setup ---\n\
 # Display welcome message\n\
 if [ -f "/app/core-assets/scripts/welcome-message.sh" ]; then\n\
@@ -260,15 +280,24 @@ export PATH="/home/dev/.cargo/bin:$PATH"\n\
 export DENO_INSTALL="/root/.deno"\n\
 export PATH="$DENO_INSTALL/bin:$PATH"\n\
 \n\
-# Add local user bin to PATH for claude\n\
-export PATH="/home/dev/.local/bin:$PATH"\n\
+# Add local user bin to PATH for claude (both dev and ubuntu paths)\n\
+export PATH="/home/dev/.local/bin:/home/ubuntu/.local/bin:$PATH"\n\
 \n\
 # Add global npm packages to PATH\n\
 if [ -d "$(npm config get prefix)/bin" ]; then\n\
     export PATH="$(npm config get prefix)/bin:$PATH"\n\
-fi\n' >> /home/dev/.bashrc
+fi\n\
+\n\
+# Claude shortcuts\n\
+alias dsp="claude --dangerously-skip-permissions"\n' >> /home/dev/.bashrc
+
+# Switch to dev user for remaining operations
+USER dev
 
 # 11. Final Setup
+# Switch back to root for final system-wide configurations
+USER root
+
 # Copy supervisord config
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
