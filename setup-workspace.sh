@@ -350,120 +350,262 @@ EOF
 
 update_claude_md
 
-# 7. Simplified MCP Server Setup (Copy-based)
-setup_mcp_server() {
-    log_info "🔧 Setting up MCP server using pre-fixed files..."
-
-    # 1. Install/Verify claude-flow
-    if ! command -v claude-flow >/dev/null 2>&1; then
-        log_info "Installing claude-flow@alpha globally..."
-        if dry_run_log "Would install claude-flow"; then :; else
-            npm install -g claude-flow@alpha || {
-                log_warning "Failed to install claude-flow, attempting with sudo..."
-                sudo npm install -g claude-flow@alpha || {
-                    log_error "Failed to install claude-flow"
-                    return 1
-                }
+# 7. Ensure claude-flow is installed globally
+ensure_claude_flow_global() {
+    log_info "🔧 Ensuring claude-flow is installed globally..."
+    
+    if [ ! -f "/usr/bin/claude-flow" ]; then
+        log_info "Installing claude-flow globally..."
+        if dry_run_log "Would install claude-flow globally"; then return 0; fi
+        
+        npm install -g claude-flow@alpha 2>/dev/null || {
+            log_warning "Failed to install claude-flow globally, trying with sudo..."
+            sudo npm install -g claude-flow@alpha || {
+                log_error "Failed to install claude-flow globally"
+                return 1
             }
-        fi
+        }
+        log_success "Installed claude-flow globally"
     else
-        log_info "claude-flow is already installed."
-    fi
-
-    # 2. Find claude-flow installation path
-    local claude_flow_path=""
-    for possible_path in \
-        "/usr/lib/node_modules/claude-flow" \
-        "/usr/local/lib/node_modules/claude-flow" \
-        "$(npm root -g)/claude-flow" \
-    ; do
-        if [ -d "$possible_path" ]; then
-            claude_flow_path="$possible_path"
-            break
-        fi
-    done
-
-    if [ -z "$claude_flow_path" ]; then
-        log_warning "claude-flow installation not found. Cannot copy fixed files."
-        return 1
-    fi
-
-    local mcp_server_dest="$claude_flow_path/src/mcp/mcp-server.js"
-    local mcp_server_src="/app/core-assets/scripts/mcp-server.js"
-
-    # 3. Copy pre-fixed mcp-server.js
-    log_info "Copying fixed mcp-server.js to $mcp_server_dest"
-    if [ -f "$mcp_server_src" ]; then
-        if dry_run_log "Would copy $mcp_server_src to $mcp_server_dest"; then :; else
-            # Create backup of the original file
-            [ -f "$mcp_server_dest" ] && cp "$mcp_server_dest" "${mcp_server_dest}.bak.$(date +%s)"
-            cp "$mcp_server_src" "$mcp_server_dest"
-            log_success "Copied fixed mcp-server.js"
-        fi
-    else
-        log_error "Source file not found: $mcp_server_src"
-    fi
-
-    # 4. Copy pre-fixed mcp-tcp-server.js
-    local tcp_server_dest="/app/core-assets/scripts/mcp-tcp-server.js"
-    local tcp_server_src="/app/core-assets/scripts/mcp-tcp-server.js" # Source is the same as dest in this case as it's provided in the repo
-
-    log_info "Ensuring mcp-tcp-server.js is the correct persistent version..."
-    if [ -f "$tcp_server_src" ]; then
-         if dry_run_log "Would ensure correct permissions for $tcp_server_dest"; then :; else
-            # The file is already in place, just ensure it's executable
-            chmod +x "$tcp_server_dest"
-            log_success "Verified mcp-tcp-server.js"
-        fi
-    else
-         log_error "Source file not found: $tcp_server_src"
-    fi
-
-    # 5. Configure shared database
-    log_info "Configuring shared database for MCP..."
-    if dry_run_log "Would create /workspace/.swarm and set CLAUDE_FLOW_DB_PATH"; then :; else
-        mkdir -p /workspace/.swarm
-        chmod 777 /workspace/.swarm
-
-        local profile_file="/etc/profile.d/claude-flow-db.sh"
-        echo "export CLAUDE_FLOW_DB_PATH=/workspace/.swarm/memory.db" > "$profile_file"
-        chmod +x "$profile_file"
-        log_success "Configured shared database path in $profile_file"
-    fi
-
-    # 6. Restart MCP TCP server
-    if command -v supervisorctl >/dev/null 2>&1; then
-        log_info "Restarting MCP TCP server to apply changes..."
-        if dry_run_log "Would restart mcp-tcp-server"; then :; else
-            supervisorctl -c /etc/supervisor/conf.d/supervisord.conf restart mcp-tcp-server 2>/dev/null || {
-                log_warning "supervisorctl restart failed. The service might not be running."
-            }
-        fi
-    fi
-
-    # 7. Verification
-    log_info "🔍 Verifying setup..."
-    if dry_run_log "Would verify setup"; then return 0; fi
-
-    sleep 3 # Give the server a moment to start
-
-    # Test the agent_list function to ensure it's not returning mock data
-    echo "🧪 Testing agent_list function..."
-    test_result=$(echo '{"jsonrpc":"2.0","id":"test","method":"tools/call","params":{"name":"agent_list","arguments":{}}}' | timeout 2 nc localhost 9500 2>/dev/null | tail -1)
-
-    if echo "$test_result" | grep -q '"id":"agent-1"'; then
-        log_error "Verification failed: MCP server is still returning mock data!"
-    elif [ -z "$test_result" ]; then
-        log_warning "Verification inconclusive: Could not connect to MCP TCP server on port 9500."
-    else
-        log_success "Verification complete: MCP server is responding correctly."
+        log_info "claude-flow already installed globally"
     fi
 }
 
 if [ "$DRY_RUN" = false ]; then
-    setup_mcp_server
+    ensure_claude_flow_global
 else
-    dry_run_log "Would set up MCP server"
+    dry_run_log "Would ensure claude-flow is installed globally"
+fi
+
+# 8. Patch MCP server to fix hardcoded version and method routing
+patch_mcp_server() {
+    log_info "🔧 Patching MCP server to fix version, method routing, and agent tracking..."
+
+    # First try global installation, then npm cache
+    local mcp_server_path="/usr/lib/node_modules/claude-flow/src/mcp/mcp-server.js"
+    
+    if [ ! -f "$mcp_server_path" ]; then
+        log_info "Global installation not found, checking npm cache..."
+        mcp_server_path=$(find /home/ubuntu/.npm/_npx -name "mcp-server.js" -path "*/claude-flow/src/mcp/*" 2>/dev/null | head -1)
+    fi
+
+    if [ -z "$mcp_server_path" ] || [ ! -f "$mcp_server_path" ]; then
+        log_warning "MCP server not found, skipping patches"
+        return 1
+    fi
+
+    log_info "Found MCP server at: $mcp_server_path"
+
+    if dry_run_log "Would patch MCP server at $mcp_server_path"; then return 0; fi
+
+    # Patch 1: Fix hardcoded version
+    if grep -q "this.version = '2.0.0-alpha.59'" "$mcp_server_path"; then
+        log_info "Patching hardcoded version..."
+        sed -i.bak "s|this.version = '2.0.0-alpha.59'|// PATCHED: Dynamic version from package.json\n    try {\n      this.version = require('../../package.json').version;\n    } catch (e) {\n      this.version = '2.0.0-alpha.101'; // Fallback\n    }|" "$mcp_server_path"
+        log_success "Patched MCP server version"
+    else
+        log_info "Version patch already applied or not needed"
+    fi
+
+    # Patch 2: Fix method routing to support direct tool calls
+    if ! grep -q "PATCHED: Check if method is a direct tool call" "$mcp_server_path"; then
+        log_info "Patching method routing for direct tool calls..."
+
+        # Create a temporary file with the patch
+        cat > /tmp/mcp_patch.txt << 'PATCH_EOF'
+        default:
+          // PATCHED: Check if method is a direct tool call
+          if (this.tools[method]) {
+            console.error(
+              `[${new Date().toISOString()}] INFO [claude-flow-mcp] Direct tool call: ${method}`
+            );
+            // Route direct tool calls to handleToolCall
+            return this.handleToolCall(id, { name: method, arguments: params });
+          }
+          return this.createErrorResponse(id, -32601, 'Method not found');
+PATCH_EOF
+
+        # Apply the patch by replacing the default case in handleMessage
+        awk '
+        /default:.*Method not found/ {
+            while ((getline line < "/tmp/mcp_patch.txt") > 0) {
+                print line
+            }
+            close("/tmp/mcp_patch.txt")
+            # Skip the original line
+            next
+        }
+        { print }
+        ' "$mcp_server_path" > "${mcp_server_path}.patched"
+
+        if [ -f "${mcp_server_path}.patched" ]; then
+            mv "${mcp_server_path}.patched" "$mcp_server_path"
+            log_success "Patched MCP server method routing"
+        else
+            log_warning "Failed to apply method routing patch"
+        fi
+
+        rm -f /tmp/mcp_patch.txt
+    else
+        log_info "Method routing patch already applied"
+    fi
+
+    # Patch 3: Fix agent_list to properly query database instead of returning mock data
+    if grep -q "// Fallback mock response" "$mcp_server_path"; then
+        log_info "Patching agent_list to use real database queries..."
+        
+        # Create backup
+        cp "$mcp_server_path" "${mcp_server_path}.bak.$(date +%s)"
+        
+        # Replace the mock fallback with proper database query
+        sed -i '/\/\/ Fallback mock response/,/timestamp: new Date().toISOString(),$/c\
+        // PATCHED: Query database directly for agents\
+        try {\
+          const swarmId = args.swarmId || await this.getActiveSwarmId();\
+          if (!swarmId) {\
+            // No swarm specified, list all agents from database\
+            const allEntries = await this.memoryStore.list();  // No namespace needed\
+            const agents = allEntries.filter(entry => entry.key.startsWith("agent:")).map(entry => {\
+              try {\
+                const data = typeof entry.value === "string" ? JSON.parse(entry.value) : entry.value;\
+                return {\
+                  id: data.id || entry.key.split(":").pop(),\
+                  name: data.name || "unknown",\
+                  type: data.type || "agent",\
+                  status: data.status || "unknown",\
+                  capabilities: data.capabilities || [],\
+                  swarmId: entry.key.split(":")[1] || "unknown"\
+                };\
+              } catch (e) {\
+                return null;\
+              }\
+            }).filter(Boolean);\
+            \
+            return {\
+              success: true,\
+              swarmId: "all",\
+              agents: agents,\
+              count: agents.length,\
+              timestamp: new Date().toISOString(),\
+            };\
+          }\
+          \
+          // Query agents for specific swarm\
+          const prefix = `agent:${swarmId}:`;\
+          const entries = await this.memoryStore.list();  // No namespace needed\
+          const swarmAgents = entries.filter(entry => entry.key.startsWith(prefix)).map(entry => {\
+            try {\
+              const data = typeof entry.value === "string" ? JSON.parse(entry.value) : entry.value;\
+              return {\
+                id: data.id || entry.key.split(":").pop(),\
+                name: data.name || "unknown",\
+                type: data.type || "agent",\
+                status: data.status || "active",\
+                capabilities: data.capabilities || []\
+              };\
+            } catch (e) {\
+              return null;\
+            }\
+          }).filter(Boolean);\
+          \
+          return {\
+            success: true,\
+            swarmId: swarmId,\
+            agents: swarmAgents,\
+            count: swarmAgents.length,\
+            timestamp: new Date().toISOString(),\
+          };\
+        } catch (error) {\
+          console.error("Failed to query agents:", error);\
+          return {\
+            success: false,\
+            error: error.message,\
+            agents: [],\
+            timestamp: new Date().toISOString(),\
+          };\
+        }' "$mcp_server_path"
+        
+        log_success "Patched agent_list to use real database queries"
+    else
+        log_info "Agent tracking patch already applied or not needed"
+    fi
+
+    # Restart MCP TCP server to apply patches
+    if command -v supervisorctl >/dev/null 2>&1; then
+        log_info "Restarting MCP TCP server to apply patches..."
+        supervisorctl -c /etc/supervisor/conf.d/supervisord.conf restart mcp-tcp-server 2>/dev/null || {
+            # Try killing the process directly if supervisorctl fails
+            local mcp_pid=$(pgrep -f "mcp-tcp-server.js" | head -1)
+            if [ -n "$mcp_pid" ]; then
+                kill -HUP "$mcp_pid" 2>/dev/null && log_success "Sent reload signal to MCP server (PID: $mcp_pid)"
+            fi
+        }
+    fi
+}
+
+if [ "$DRY_RUN" = false ]; then
+    patch_mcp_server
+else
+    dry_run_log "Would patch MCP server"
+fi
+
+# 9. Patch TCP server to use global installation and shared database
+patch_tcp_server() {
+    log_info "🔧 Patching TCP server to use global installation and shared database..."
+    
+    local tcp_server_path="/app/core-assets/scripts/mcp-tcp-server.js"
+    
+    if [ ! -f "$tcp_server_path" ]; then
+        tcp_server_path="/workspace/scripts/mcp-tcp-server.js"
+    fi
+    
+    if [ ! -f "$tcp_server_path" ]; then
+        log_warning "TCP server not found, skipping patch"
+        return 1
+    fi
+    
+    log_info "Found TCP server at: $tcp_server_path"
+    
+    if dry_run_log "Would patch TCP server at $tcp_server_path"; then return 0; fi
+    
+    # Create backup
+    cp "$tcp_server_path" "${tcp_server_path}.bak.$(date +%s)" 2>/dev/null || true
+    
+    # Patch: Change from npx to global installation and add shared database
+    if grep -q "spawn('npx'" "$tcp_server_path" || grep -q "spawn('/usr/bin/claude-flow'" "$tcp_server_path"; then
+        log_info "Patching TCP server spawn commands..."
+        
+        # First, replace npx with global installation
+        sed -i "s|spawn('npx', \['claude-flow@alpha'|spawn('/usr/bin/claude-flow', ['|g" "$tcp_server_path"
+        
+        # Then ensure environment includes shared database - handle both cases
+        # Case 1: When env line exists but doesn't have our DB path
+        if grep -q "env: {" "$tcp_server_path" && ! grep -q "CLAUDE_FLOW_DB_PATH" "$tcp_server_path"; then
+            sed -i "/spawn('\/usr\/bin\/claude-flow'/,/env: {/{
+                s|env: { \(.*\)|env: {\n          ...process.env,\n          CLAUDE_FLOW_DB_PATH: '/workspace/.swarm/memory.db', // Ensure same DB is used\n          \1|
+            }" "$tcp_server_path"
+        fi
+        
+        # Fix any duplicate env properties that might have been created
+        sed -i '/env: {.*env: {/s/env: {.*env: { \.\.\./env: {\n          .../' "$tcp_server_path"
+        
+        log_success "Patched TCP server to use global installation with shared database"
+    else
+        log_info "TCP server spawn commands already patched"
+    fi
+    
+    # Ensure database directory exists
+    if [ ! -d "/workspace/.swarm" ]; then
+        mkdir -p /workspace/.swarm
+        chown -R dev:dev /workspace/.swarm
+        log_success "Created shared database directory: /workspace/.swarm"
+    fi
+}
+
+if [ "$DRY_RUN" = false ]; then
+    patch_tcp_server
+else
+    dry_run_log "Would patch TCP server"
 fi
 
 # --- Final Summary ---
@@ -509,18 +651,18 @@ show_setup_summary() {
 # --- Verification Test ---
 verify_agent_tracking() {
     log_info "🧪 Verifying agent tracking functionality..."
-
+    
     if [ "$DRY_RUN" = true ]; then
         dry_run_log "Would verify agent tracking"
         return 0
     fi
-
+    
     # Wait for services to be ready
     sleep 3
-
+    
     # Test agent list command
     local test_result=$(echo '{"jsonrpc":"2.0","id":"test","method":"tools/call","params":{"name":"agent_list","arguments":{}}}' | nc -w 3 localhost 9500 2>/dev/null | tail -n 1)
-
+    
     if echo "$test_result" | grep -q '"success":true' && ! echo "$test_result" | grep -q '"id":"agent-1"'; then
         log_success "✅ Agent tracking verified - database integration working!"
     elif echo "$test_result" | grep -q '"id":"agent-1"'; then
@@ -534,26 +676,26 @@ verify_agent_tracking() {
 # 9. Create Rust backend patch file for Docker build
 create_rust_patches() {
     log_info "📝 Creating consolidated Rust backend patches for Docker build..."
-
+    
     # Create patches directory
     mkdir -p /workspace/ext/patches
-
+    
     # Create consolidated fix that merges the two systems
     cat > /workspace/ext/patches/consolidated_agent_graph_fix.patch << 'PATCH_EOF'
 --- a/src/actors/claude_flow_actor_tcp.rs
 +++ b/src/actors/claude_flow_actor_tcp.rs
 @@ -738,6 +738,11 @@
      }
-
+     
      fn poll_agent_statuses(&mut self, _ctx: &mut Context<Self>) {
 +        // DISABLED: ClaudeFlowActor TCP polling is broken due to persistent connection issues
 +        // The MCP server closes connections after each request, but this actor expects persistent connections
 +        // BotsClient handles agent fetching correctly with fresh connections
 +        return;
-+
-         debug!("Polling agent statuses via TCP (100ms cycle) - {} consecutive failures",
++        
+         debug!("Polling agent statuses via TCP (100ms cycle) - {} consecutive failures", 
                 self.consecutive_poll_failures);
-
+         
 --- a/src/services/bots_client.rs
 +++ b/src/services/bots_client.rs
 @@ -225,7 +225,18 @@
@@ -561,7 +703,7 @@ create_rust_patches() {
                                                              let mut lock = updates.write().await;
                                                              *lock = Some(update);
 -                                                            continue; // Skip the rest of the parsing
-+
++                                                            
 +                                                            // CRITICAL FIX: Send agents to graph
 +                                                            if let Some(graph_addr) = graph_service_addr {
 +                                                                info!("📨 BotsClient sending {} agents to graph", update.agents.len());
@@ -577,7 +719,7 @@ create_rust_patches() {
                                                      }
                                                  }
 PATCH_EOF
-
+    
     log_success "Created consolidated Rust backend patch at /workspace/ext/patches/consolidated_agent_graph_fix.patch"
     log_info "This patch:"
     log_info "  1. Disables broken ClaudeFlowActor TCP polling"

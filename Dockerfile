@@ -156,8 +156,10 @@ RUN npm cache clean --force && \
     @google/gemini-cli@latest \
     @openai/codex@latest
 
-# Install claude via install script as root
+# Install claude via install script as dev user
+USER dev
 RUN curl -fsSL https://claude.ai/install.sh | bash -s 1.0.42
+USER root
 
 # Grant dev user permissions to update global npm packages
 RUN chown -R dev:dev "$(npm config get prefix)/lib/node_modules" && \
@@ -257,6 +259,9 @@ export PATH="/home/dev/.cargo/bin:$PATH"\n\
 # Add Deno to PATH\n\
 export DENO_INSTALL="/root/.deno"\n\
 export PATH="$DENO_INSTALL/bin:$PATH"\n\
+\n\
+# Add local user bin to PATH for claude\n\
+export PATH="/home/dev/.local/bin:$PATH"\n\
 \n\
 # Add global npm packages to PATH\n\
 if [ -d "$(npm config get prefix)/bin" ]; then\n\
